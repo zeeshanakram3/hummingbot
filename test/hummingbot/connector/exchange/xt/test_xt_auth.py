@@ -43,7 +43,7 @@ class XtAuthTests(TestCase):
 
         auth = XtAuth(api_key=self._api_key, secret_key=self._secret, time_provider=mock_time_provider)
         url = web_utils.private_rest_url(CONSTANTS.ORDER_PATH_URL, CONSTANTS.DEFAULT_DOMAIN)
-        request = RESTRequest(method=RESTMethod.POST, url=url, data=params, is_auth_required=True)
+        request = RESTRequest(method=RESTMethod.POST, url=url, data=json.dumps(params), is_auth_required=True)
         configured_request = self.async_run_with_timeout(auth.rest_authenticate(request))
 
         request_headers = auth.header_for_authentication()

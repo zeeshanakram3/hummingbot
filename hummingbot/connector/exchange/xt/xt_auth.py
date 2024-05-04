@@ -1,6 +1,5 @@
 import hashlib
 import hmac
-import json
 from collections import OrderedDict
 from typing import Dict
 from urllib.parse import urlencode
@@ -35,7 +34,7 @@ class XtAuth(AuthBase):
         if request.method == RESTMethod.GET or request.method == RESTMethod.DELETE:
             headers = self.add_auth_to_headers(method=request.method, path=path, params_str=params_str)
         else:
-            headers = self.add_auth_to_headers(method=request.method, path=path, body_str=json.dumps(request.data))
+            headers = self.add_auth_to_headers(method=request.method, path=path, body_str=request.data)
 
         if request.headers is not None:
             headers.update(request.headers)
