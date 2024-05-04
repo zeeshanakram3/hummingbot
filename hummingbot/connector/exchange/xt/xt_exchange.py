@@ -191,12 +191,13 @@ class XtExchange(ExchangePyBase):
             "bizType": "SPOT",
         }
         if order_type == OrderType.LIMIT:
-            api_params["price_str"] = f"{price:f}"
+            api_params["price"] = f"{price:f}"
             api_params["timeInForce"] = CONSTANTS.TIME_IN_FORCE_GTC
 
         order_result = await self._api_post(path_url=CONSTANTS.ORDER_PATH_URL, data=api_params, is_auth_required=True)
 
         if "result" not in order_result or order_result["result"] is None:
+            self.logger().error(f"Failed to place order {order_result}", exc_info=True)
             raise
 
         o_id = str(order_result["result"]["orderId"])
@@ -541,10 +542,10 @@ class XtExchange(ExchangePyBase):
 
     def _initialize_trading_pair_symbols_from_exchange_info(self, exchange_info: Dict[str, Any]):
         mapping = bidict()
-        print("exchangeInfo")
         for symbol_data in filter(xt_utils.is_exchange_information_valid, exchange_info["result"]["symbols"]):
             mapping[symbol_data["symbol"]] = combine_to_hb_trading_pair(
-                base=symbol_data["baseCurrency"].upper(), quote=symbol_data["quoteCurrency"].upper()
+                base=symbol_data["baseCurrency"].upper().replace("-", "_"),
+                quote=symbol_data["quoteCurrency"].upper().replace("-", "_"),
             )
         self._set_trading_pair_symbol_map(mapping)
 

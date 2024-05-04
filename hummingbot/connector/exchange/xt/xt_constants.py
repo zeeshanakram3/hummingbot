@@ -24,7 +24,7 @@ SERVER_TIME_PATH_URL = "/public/time"
 ACCOUNTS_PATH_URL = "/balances"
 MY_TRADES_PATH_URL = "/trade"
 ORDER_PATH_URL = "/order"
-OPEN_ORDER_PATH_URL = "open-order"
+OPEN_ORDER_PATH_URL = "/open-order"
 GET_ACCOUNT_LISTENKEY = "/ws-token"
 
 WS_HEARTBEAT_TIME_INTERVAL = 15
@@ -54,11 +54,9 @@ XT_VALIDATE_CONTENTTYPE_JSON = "application/json;charset=UTF-8"
 
 # Order States
 ORDER_STATE = {
-    "PENDING": OrderState.PENDING_CREATE,
     "NEW": OrderState.OPEN,
     "FILLED": OrderState.FILLED,
     "PARTIALLY_FILLED": OrderState.PARTIALLY_FILLED,
-    "PENDING_CANCEL": OrderState.OPEN,
     "CANCELED": OrderState.CANCELED,
     "REJECTED": OrderState.FAILED,
     "EXPIRED": OrderState.FAILED,

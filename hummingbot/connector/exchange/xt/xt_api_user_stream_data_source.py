@@ -82,7 +82,7 @@ class XtAPIUserStreamDataSource(UserStreamTrackerDataSource):
                     timeout=CONSTANTS.WS_HEARTBEAT_TIME_INTERVAL,
                 )
             except asyncio.TimeoutError:
-                await self._send_ping()
+                await self._send_ping(websocket_assistant)
 
     async def _process_event_message(self, event_message: Dict[str, Any], queue: asyncio.Queue):
         if len(event_message) > 0 and ("data" in event_message and "topic" in event_message):
