@@ -59,7 +59,7 @@ class XtAPIUserStreamDataSource(UserStreamTrackerDataSource):
         try:
             payload = {
                 "method": "subscribe",
-                "params": ["balance", "order", "trade"],  # trade channel doesn't have fee info
+                "params": ["balance", "order"],  # trade channel doesn't have fee info
                 "listenKey": self._current_listen_key,
                 "id": CONSTANTS.USER_STREAM_ID,
             }

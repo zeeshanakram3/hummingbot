@@ -127,10 +127,10 @@ class XtExchange(ExchangePyBase):
         return is_time_synchronizer_related
 
     def _is_order_not_found_during_status_update_error(self, status_update_exception: Exception) -> bool:
-        pass
+        return "ORDER_005" in str(status_update_exception)
 
     def _is_order_not_found_during_cancelation_error(self, cancelation_exception: Exception) -> bool:
-        pass
+        return "ORDER_005" in str(cancelation_exception)
 
     def _create_web_assistants_factory(self) -> WebAssistantsFactory:
         return web_utils.build_api_factory(
@@ -164,7 +164,7 @@ class XtExchange(ExchangePyBase):
         price: Decimal = s_decimal_NaN,
         is_maker: Optional[bool] = None,
     ) -> AddedToCostTradeFee:
-        is_maker = order_type is OrderType.LIMIT_MAKER
+        is_maker = order_type is OrderType.LIMIT
         return AddedToCostTradeFee(percent=self.estimate_fee_pct(is_maker))
 
     async def _place_order(
@@ -212,28 +212,11 @@ class XtExchange(ExchangePyBase):
         cancel_result = await self._api_delete(
             path_url=CONSTANTS.ORDER_PATH_URL,
             params=api_params,
-            is_auth_required=True,  # TODO: needed? // limit_id=CONSTANTS.MANAGE_ORDER
+            is_auth_required=True,
         )
-        if "result" in cancel_result and "cancelId" in cancel_result["result"]:
+        if cancel_result["rc"] == 0:
             return True
         return False
-
-    # Todo: Not needed? Implemented in the base class
-    async def _execute_order_cancel(self, order: InFlightOrder) -> str:
-        try:
-            await self._place_cancel(order.client_order_id, order)
-            return order.client_order_id
-        except asyncio.CancelledError:
-            raise
-        except asyncio.TimeoutError:
-            # Binance does not allow cancels with the client/user order id
-            # so log a warning and wait for the creation of the order to complete
-            self.logger().warning(
-                f"Failed to cancel the order {order.client_order_id} because it does not have an exchange order id yet"
-            )
-            await self._order_tracker.process_order_not_found(order.client_order_id)
-        except Exception:
-            self.logger().error(f"Failed to cancel order {order.client_order_id}", exc_info=True)
 
     # Todo: Not needed? Implemented in the base class
     async def cancel_all(self, timeout_seconds: float) -> List[CancellationResult]:
@@ -395,9 +378,11 @@ class XtExchange(ExchangePyBase):
                         if CONSTANTS.ORDER_STATE[order_update.get("st")] == OrderState.CANCELED:
                             await self._cancelled_order_handler(tracked_order.client_order_id, order_update)
 
+                        update_timestamp = order_update["t"] if "t" in order_update else order_update["ct"]
+
                         order_update = OrderUpdate(
                             trading_pair=tracked_order.trading_pair,
-                            update_timestamp=order_update["t"] * 1e-3,
+                            update_timestamp=update_timestamp * 1e-3,
                             new_state=CONSTANTS.ORDER_STATE[order_update["st"]],
                             client_order_id=tracked_order.client_order_id,
                             exchange_order_id=str(order_update["i"]),
@@ -418,28 +403,6 @@ class XtExchange(ExchangePyBase):
             except Exception:
                 self.logger().error("Unexpected error in user stream listener loop.", exc_info=True)
                 await self._sleep(5.0)
-
-    async def _update_orders(self):
-        orders_to_update = self.in_flight_orders.copy()
-        for client_order_id, order in orders_to_update.items():
-            try:
-                order_update = await self._request_order_status(tracked_order=order)
-                if client_order_id in self.in_flight_orders and order_update is not None:
-                    self._order_tracker.process_order_update(order_update)
-            except asyncio.CancelledError:
-                raise
-            except asyncio.TimeoutError:
-                self.logger().debug(
-                    f"Tracked order {client_order_id} does not have an exchange id. "
-                    f"Attempting fetch in next polling interval."
-                )
-                await self._order_tracker.process_order_not_found(client_order_id)
-            except Exception as request_error:
-                self.logger().network(
-                    f"Error fetching status update for the order {order.client_order_id}: {request_error}.",
-                    app_warning_msg=f"Failed to fetch status update for the order {order.client_order_id}.",
-                )
-                await self._order_tracker.process_order_not_found(order.client_order_id)
 
     async def _all_trade_updates_for_order(self, order: InFlightOrder) -> List[TradeUpdate]:
         trade_updates = []
@@ -492,7 +455,6 @@ class XtExchange(ExchangePyBase):
             path_url=CONSTANTS.ORDER_PATH_URL,
             params={"orderId": int(exchange_order_id), "clientOrderId": client_order_id},
             is_auth_required=True,
-            limit_id=CONSTANTS.MANAGE_ORDER,
         )
 
         # order update might've already come through user stream listner
@@ -506,11 +468,17 @@ class XtExchange(ExchangePyBase):
         if new_state == OrderState.CANCELED:
             await self._cancelled_order_handler(client_order_id, updated_order_data)
 
+        update_timestamp = (
+            updated_order_data["updatedTime"]
+            if updated_order_data["updatedTime"] is not None
+            else updated_order_data["time"]
+        )
+
         order_update = OrderUpdate(
             client_order_id=tracked_order.client_order_id,
             exchange_order_id=str(updated_order_data["orderId"]),
             trading_pair=tracked_order.trading_pair,
-            update_timestamp=updated_order_data["updatedTime"] * 1e-3,
+            update_timestamp=update_timestamp * 1e-3,
             new_state=new_state,
         )
 

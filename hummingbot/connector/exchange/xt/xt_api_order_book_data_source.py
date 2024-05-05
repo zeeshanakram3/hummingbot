@@ -90,8 +90,8 @@ class XtAPIOrderBookDataSource(OrderBookTrackerDataSource):
             depth_params = []
             for trading_pair in self._trading_pairs:
                 symbol = await self._connector.exchange_symbol_associated_to_pair(trading_pair=trading_pair)
-                trade_params.append(f"trade@{symbol.lower()}")
-                depth_params.append(f"depth_update@{symbol.lower()}")
+                trade_params.append(f"trade@{symbol}")
+                depth_params.append(f"depth_update@{symbol}")
 
             payload = {"method": "subscribe", "params": trade_params, "id": CONSTANTS.TRADE_STREAM_ID}
             subscribe_trade_request: WSJSONRequest = WSJSONRequest(payload=payload)
