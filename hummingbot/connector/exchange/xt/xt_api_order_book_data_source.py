@@ -58,28 +58,6 @@ class XtAPIOrderBookDataSource(OrderBookTrackerDataSource):
 
         return data["result"]
 
-    # TODO: not needed as already implemented in the base class?
-    # async def listen_for_subscriptions(self):
-    #     """
-    #     Connects to the trade events and order diffs websocket endpoints and listens to the messages sent by the
-    #     exchange. Each message is stored in its own queue.
-    #     """
-    #     ws: Optional[WSAssistant] = None
-    #     while True:
-    #         try:
-    #             ws: WSAssistant = await self._connected_websocket_assistant()
-    #             await self._subscribe_channels(ws)
-    #             await self._process_websocket_messages(websocket_assistant=ws)
-    #         except asyncio.CancelledError:
-    #             raise
-    #         except Exception:
-    #             self.logger().exception(
-    #                 "Unexpected error occurred when listening to order book streams. Retrying in 5 seconds...",
-    #             )
-    #             await self._sleep(1.0)
-    #         finally:
-    #             ws and await ws.disconnect()
-
     async def _subscribe_channels(self, ws: WSAssistant):
         """
         Subscribes to the trade events and diff orders events through the provided websocket connection.
@@ -103,6 +81,9 @@ class XtAPIOrderBookDataSource(OrderBookTrackerDataSource):
             await ws.send(subscribe_orderbook_request)
 
             self.logger().info("Subscribed to public order book and trade channels...")
+
+            # Start a task to periodically send ping messages
+            asyncio.create_task(self._send_ping_periodically(ws))
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -154,3 +135,18 @@ class XtAPIOrderBookDataSource(OrderBookTrackerDataSource):
                 else self._trade_messages_queue_key
             )
         return channel
+
+    async def _send_ping_periodically(self, ws: WSAssistant):
+        while True:
+            try:
+                await self._send_ping(ws)
+                await asyncio.sleep(15)
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                self.logger().warning("Error sending ping message.", exc_info=True)
+
+    async def _send_ping(self, websocket_assistant: WSAssistant):
+        payload = {"method": "ping"}
+        ping_request: WSJSONRequest = WSJSONRequest(payload=payload)
+        await websocket_assistant.send(ping_request)
