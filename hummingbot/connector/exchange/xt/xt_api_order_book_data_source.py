@@ -33,6 +33,7 @@ class XtAPIOrderBookDataSource(OrderBookTrackerDataSource):
         self._diff_messages_queue_key = CONSTANTS.DIFF_EVENT_TYPE
         self._domain = domain
         self._api_factory = api_factory
+        self._ping_task: Optional[asyncio.Task] = None
 
     async def get_last_traded_prices(self, trading_pairs: List[str], domain: Optional[str] = None) -> Dict[str, float]:
         return await self._connector.get_last_traded_prices(trading_pairs=trading_pairs)
@@ -83,7 +84,7 @@ class XtAPIOrderBookDataSource(OrderBookTrackerDataSource):
             self.logger().info("Subscribed to public order book and trade channels...")
 
             # Start a task to periodically send ping messages
-            asyncio.create_task(self._send_ping_periodically(ws))
+            self._ping_task = asyncio.create_task(self._send_ping_periodically(ws))
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -139,8 +140,8 @@ class XtAPIOrderBookDataSource(OrderBookTrackerDataSource):
     async def _send_ping_periodically(self, ws: WSAssistant):
         while True:
             try:
-                await self._send_ping(ws)
                 await asyncio.sleep(15)
+                await self._send_ping(ws)
             except asyncio.CancelledError:
                 break
             except Exception:
@@ -150,3 +151,9 @@ class XtAPIOrderBookDataSource(OrderBookTrackerDataSource):
         payload = {"method": "ping"}
         ping_request: WSJSONRequest = WSJSONRequest(payload=payload)
         await websocket_assistant.send(ping_request)
+
+    async def _on_order_stream_interruption(self, websocket_assistant: Optional[WSAssistant] = None):
+        if self._ping_task and not self._ping_task.done():
+            self._ping_task.cancel()
+
+        await super()._on_order_stream_interruption(websocket_assistant=websocket_assistant)
