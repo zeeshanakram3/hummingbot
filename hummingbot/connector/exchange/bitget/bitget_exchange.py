@@ -117,10 +117,10 @@ class BitgetExchange(ExchangePyBase):
         return self._trading_required
 
     def supported_order_types(self):
-        return [OrderType.LIMIT, OrderType.LIMIT_MAKER, OrderType.MARKET]
+        return [OrderType.LIMIT, OrderType.MARKET]
 
     async def get_all_pairs_prices(self) -> List[Dict[str, str]]:
-        pairs_prices = await self._api_get(path_url=CONSTANTS.TICKER_BOOK_PATH_URL)
+        pairs_prices = await self._api_get(path_url=CONSTANTS.TICKER_PRICE_CHANGE_PATH_URL)
         return pairs_prices
 
     def _is_request_exception_related_to_time_synchronizer(self, request_exception: Exception):
@@ -237,7 +237,6 @@ class BitgetExchange(ExchangePyBase):
                 o_id = "UNKNOWN"
                 transact_time = self._time_synchronizer.time()
             else:
-                self.logger().error(f"Failed to place order {order_result}", exc_info=True)
                 raise
         return o_id, transact_time
 
@@ -248,9 +247,10 @@ class BitgetExchange(ExchangePyBase):
             "clientOid": order_id,
         }
         cancel_result = await self._api_post(
-            path_url=CONSTANTS.CANCEL_ORDER_PATH_URL, params=api_params, is_auth_required=True
+            path_url=CONSTANTS.CANCEL_ORDER_PATH_URL, data=api_params, is_auth_required=True
         )
-        if cancel_result["message"] == "success":
+
+        if cancel_result["msg"] == "success":
             return True
         return False
 
@@ -288,7 +288,7 @@ class BitgetExchange(ExchangePyBase):
                 trading_pair = await self.trading_pair_associated_to_exchange_symbol(symbol=rule.get("symbol"))
 
                 min_order_size = Decimal(rule.get("minTradeAmount"))
-                min_price_increment = Decimal(f"1e-{rule['quotePrecision']}")
+                min_price_increment = Decimal(f"1e-{rule['pricePrecision']}")
                 min_amount_increment = Decimal(f"1e-{rule['quantityPrecision']}")
                 min_notional_size = Decimal(rule["minTradeUSDT"])
                 # TODO: this will only be correct for USDT/USDC pairs, for example ETH-BTC will be wrong
@@ -346,53 +346,55 @@ class BitgetExchange(ExchangePyBase):
                 self.logger().error("Unexpected error in user stream listener loop.", exc_info=True)
                 await self._sleep(5.0)
 
-    def _process_trade_message(self, trade_data: Dict[str, Any]):
-        order_id = trade_data["orderId"]
-        tracked_order = self._order_tracker.all_fillable_orders_by_exchange_order_id.get(order_id)
-        if tracked_order is None:
-            self.logger().debug(f"Ignoring trade message with order id {order_id}: not in in_flight_orders.")
-        else:
-            fee = TradeFeeBase.new_spot_fee(
-                fee_schema=self.trade_fee_schema(),
-                trade_type=tracked_order.trade_type,
-                percent_token=trade_data["feeDetail"]["feeCoin"],
-                flat_fees=[
-                    TokenAmount(
-                        amount=Decimal(trade_data["feeDetail"]["totalFee"]), token=trade_data["feeDetail"]["feeCoin"]
-                    )
-                ],
-            )
-            trade_update = TradeUpdate(
-                trade_id=(trade_data["tradeId"]),
-                client_order_id=tracked_order.client_order_id,
-                exchange_order_id=tracked_order.exchange_order_id,
+    def _process_trade_message(self, trades: Dict[str, Any]):
+        for trade_data in trades:
+            order_id = trade_data["orderId"]
+            tracked_order = self._order_tracker.all_fillable_orders_by_exchange_order_id.get(order_id)
+            if tracked_order is None:
+                self.logger().debug(f"Ignoring trade message with order id {order_id}: not in in_flight_orders.")
+            else:
+                fee = TradeFeeBase.new_spot_fee(
+                    fee_schema=self.trade_fee_schema(),
+                    trade_type=tracked_order.trade_type,
+                    percent_token=trade_data["feeDetail"]["feeCoin"],
+                    flat_fees=[
+                        TokenAmount(
+                            amount=Decimal(trade_data["feeDetail"]["totalFee"]),
+                            token=trade_data["feeDetail"]["feeCoin"],
+                        )
+                    ],
+                )
+                trade_update = TradeUpdate(
+                    trade_id=(trade_data["tradeId"]),
+                    client_order_id=tracked_order.client_order_id,
+                    exchange_order_id=tracked_order.exchange_order_id,
+                    trading_pair=tracked_order.trading_pair,
+                    fee=fee,
+                    fill_base_amount=Decimal(trade_data["size"]),
+                    fill_quote_amount=Decimal(trade_data["amount"]),
+                    fill_price=Decimal(trade_data["trade_data"]),
+                    fill_timestamp=float(trade_data["uTime"]) * 1e-3,
+                )
+                self._order_tracker.process_trade_update(trade_update)
+
+    def _process_order_message(self, orders: Dict[str, Any]):
+        for order_data in orders:
+            client_order_id = order_data["clientOid"]
+            tracked_order = self._order_tracker.all_updatable_orders.get(client_order_id)
+            if not tracked_order:
+                self.logger().debug(f"Ignoring order message with id {client_order_id}: not in in_flight_orders.")
+                return
+
+            update_timestamp = order_data["uTime"] if order_data["uTime"] is not None else order_data["cTime"]
+
+            order_update = OrderUpdate(
                 trading_pair=tracked_order.trading_pair,
-                fee=fee,
-                fill_base_amount=Decimal(trade_data["size"]),
-                fill_quote_amount=Decimal(trade_data["amount"]),
-                fill_price=Decimal(trade_data["trade_data"]),
-                fill_timestamp=float(trade_data["uTime"]) * 1e-3,
+                update_timestamp=int(update_timestamp) * 1e-3,
+                new_state=CONSTANTS.ORDER_STATE[order_data["status"]],
+                client_order_id=client_order_id,
+                exchange_order_id=order_data["orderId"],
             )
-            self._order_tracker.process_trade_update(trade_update)
-
-    def _process_order_message(self, order_data: Dict[str, Any]):
-        client_order_id = order_data["clientOid"]
-        tracked_order = self._order_tracker.all_updatable_orders.get(client_order_id)
-        if not tracked_order:
-            self.logger().debug(f"Ignoring order message with id {client_order_id}: not in in_flight_orders.")
-            return
-
-        update_timestamp = order_data["uTime"] if order_data["uTime"] is not None else order_data["cTime"]
-
-        order_update = OrderUpdate(
-            trading_pair=tracked_order.trading_pair,
-            update_timestamp=int(update_timestamp) * 1e-3,
-            new_state=CONSTANTS.ORDER_STATE[order_data["status"]],
-            client_order_id=client_order_id,
-            exchange_order_id=order_data["orderId"],
-        )
-
-        self._order_tracker.process_order_update(order_update=order_update)
+            self._order_tracker.process_order_update(order_update=order_update)
 
     def _process_balance_message_ws(self, accounts: List[Dict[str, Any]]):
         for account_data in accounts:
@@ -410,9 +412,11 @@ class BitgetExchange(ExchangePyBase):
             trading_pair = await self.exchange_symbol_associated_to_pair(trading_pair=order.trading_pair)
             response = await self._api_get(
                 path_url=CONSTANTS.MY_TRADES_PATH_URL,
-                params={"symbol": trading_pair, "orderId": exchange_order_id},
+                params={
+                    "orderId": exchange_order_id,
+                    "symbol": trading_pair,
+                },
                 is_auth_required=True,
-                limit_id=CONSTANTS.MY_TRADES_PATH_URL,
             )
 
             all_fills_response = response["data"]
@@ -447,7 +451,10 @@ class BitgetExchange(ExchangePyBase):
         exchange_order_id = await tracked_order.get_exchange_order_id()
         response = await self._api_get(
             path_url=CONSTANTS.GET_ORDER_PATH_URL,
-            params={"orderId": exchange_order_id, "clientOid": client_order_id},
+            params={
+                "clientOid": client_order_id,
+                "orderId": exchange_order_id,
+            },
             is_auth_required=True,
         )
 
