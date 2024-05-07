@@ -432,7 +432,7 @@ class BitgetExchange(ExchangePyBase):
                     ],
                 )
                 trade_update = TradeUpdate(
-                    trade_id=(trade["tradeId"]),
+                    trade_id=trade["tradeId"],
                     client_order_id=order.client_order_id,
                     exchange_order_id=exchange_order_id,
                     trading_pair=order.trading_pair,
@@ -458,7 +458,7 @@ class BitgetExchange(ExchangePyBase):
             is_auth_required=True,
         )
 
-        updated_order_data = response["data"]
+        updated_order_data = response["data"][0]
 
         new_state = CONSTANTS.ORDER_STATE[updated_order_data["status"]]
 
