@@ -437,7 +437,7 @@ class XtExchange(ExchangePyBase):
                     trade_id=str(trade["tradeId"]),
                     client_order_id=order.client_order_id,
                     exchange_order_id=exchange_order_id,
-                    trading_pair=trading_pair,
+                    trading_pair=order.trading_pair,
                     fee=fee,
                     fill_base_amount=Decimal(trade["quantity"]),
                     fill_quote_amount=Decimal(trade["quoteQty"]),
