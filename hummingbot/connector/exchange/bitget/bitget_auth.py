@@ -1,6 +1,5 @@
 import base64
 import hmac
-import json
 import time
 from typing import Any, Dict, List
 from urllib.parse import urlencode
@@ -35,7 +34,7 @@ class BitgetAuth(AuthBase):
         if request.method == RESTMethod.GET:
             headers = self.add_auth_to_headers(method=request.method, path=path, params_str=params_str)
         else:
-            headers = self.add_auth_to_headers(method=request.method, path=path, body_str=json.dumps(request.data))
+            headers = self.add_auth_to_headers(method=request.method, path=path, body_str=request.data)
 
         if request.headers is not None:
             headers.update(request.headers)
