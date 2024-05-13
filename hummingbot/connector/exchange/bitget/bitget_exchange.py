@@ -205,7 +205,9 @@ class BitgetExchange(ExchangePyBase):
         **kwargs,
     ) -> Tuple[str, float]:
         order_result = None
-        amount_str = f"{amount:f}"
+        amount_str = (
+            f"{amount*price:f}" if order_type is OrderType.MARKET and trade_type is TradeType.BUY else f"{amount:f}"
+        )
         type_str = BitgetExchange.bitget_order_type(order_type)
         side_str = CONSTANTS.SIDE_BUY if trade_type is TradeType.BUY else CONSTANTS.SIDE_SELL
         symbol = await self.exchange_symbol_associated_to_pair(trading_pair=trading_pair)
