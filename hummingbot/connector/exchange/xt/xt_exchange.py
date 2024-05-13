@@ -189,10 +189,12 @@ class XtExchange(ExchangePyBase):
             "type": type_str,
             "clientOrderId": order_id,
             "bizType": "SPOT",
-            "timeInForce": CONSTANTS.TIME_IN_FORCE_GTC,
         }
         if order_type == OrderType.LIMIT:
             api_params["price"] = f"{price:f}"
+            api_params["timeInForce"] = CONSTANTS.TIME_IN_FORCE_GTC
+        else:
+            api_params["timeInForce"] = CONSTANTS.TIME_IN_FORCE_IOC
 
         order_result = await self._api_post(path_url=CONSTANTS.ORDER_PATH_URL, data=api_params, is_auth_required=True)
 
