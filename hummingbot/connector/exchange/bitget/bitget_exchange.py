@@ -374,7 +374,7 @@ class BitgetExchange(ExchangePyBase):
                     fee=fee,
                     fill_base_amount=Decimal(trade_data["size"]),
                     fill_quote_amount=Decimal(trade_data["amount"]),
-                    fill_price=Decimal(trade_data["trade_data"]),
+                    fill_price=Decimal(trade_data["priceAvg"]),
                     fill_timestamp=float(trade_data["uTime"]) * 1e-3,
                 )
                 self._order_tracker.process_trade_update(trade_update)
