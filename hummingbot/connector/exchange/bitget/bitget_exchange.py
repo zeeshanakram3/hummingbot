@@ -507,10 +507,13 @@ class BitgetExchange(ExchangePyBase):
         self._set_trading_pair_symbol_map(mapping)
 
     async def _get_last_traded_price(self, trading_pair: str) -> float:
-        params = {"symbol": await self.exchange_symbol_associated_to_pair(trading_pair=trading_pair)}
+        symbol = await self.exchange_symbol_associated_to_pair(trading_pair=trading_pair)
+        params = {"symbol": symbol}
 
         resp_json = await self._api_request(
             method=RESTMethod.GET, path_url=CONSTANTS.TICKER_PRICE_CHANGE_PATH_URL, params=params
         )
 
-        return float(resp_json["lastPr"])
+        for single_ticker in resp_json["data"]:
+            if single_ticker["symbol"] == symbol:
+                return float(single_ticker["lastPr"])
