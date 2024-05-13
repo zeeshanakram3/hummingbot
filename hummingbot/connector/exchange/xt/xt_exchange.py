@@ -185,16 +185,20 @@ class XtExchange(ExchangePyBase):
         api_params = {
             "symbol": symbol,
             "side": side_str,
-            "quantity": amount_str,
             "type": type_str,
             "clientOrderId": order_id,
             "bizType": "SPOT",
         }
         if order_type == OrderType.LIMIT:
             api_params["price"] = f"{price:f}"
+            api_params["quantity"] = amount_str
             api_params["timeInForce"] = CONSTANTS.TIME_IN_FORCE_GTC
-        else:
+        elif order_type == OrderType.MARKET:
             api_params["timeInForce"] = CONSTANTS.TIME_IN_FORCE_IOC
+            if trade_type == TradeType.BUY:
+                api_params["quoteQty"] = f"{amount*price:f}"
+            else:
+                api_params["quantity"] = amount_str
 
         order_result = await self._api_post(path_url=CONSTANTS.ORDER_PATH_URL, data=api_params, is_auth_required=True)
 
