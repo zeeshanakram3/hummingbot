@@ -358,11 +358,11 @@ class BitgetExchange(ExchangePyBase):
                 fee = TradeFeeBase.new_spot_fee(
                     fee_schema=self.trade_fee_schema(),
                     trade_type=tracked_order.trade_type,
-                    percent_token=trade_data["feeDetail"]["feeCoin"],
+                    percent_token=trade_data["feeDetail"][0]["feeCoin"],
                     flat_fees=[
                         TokenAmount(
-                            amount=Decimal(trade_data["feeDetail"]["totalFee"]),
-                            token=trade_data["feeDetail"]["feeCoin"],
+                            amount=Decimal(trade_data["feeDetail"][0]["totalFee"]),
+                            token=trade_data["feeDetail"][0]["feeCoin"],
                         )
                     ],
                 )
