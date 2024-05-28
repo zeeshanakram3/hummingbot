@@ -16,9 +16,9 @@ from hummingbot.connector.exchange_py_base import ExchangePyBase
 from hummingbot.connector.trading_rule import TradingRule
 from hummingbot.connector.utils import TradeFillOrderDetails, combine_to_hb_trading_pair
 from hummingbot.core.data_type.common import OrderType, TradeType
-from hummingbot.core.data_type.in_flight_order import InFlightOrder, OrderUpdate, TradeUpdate
+from hummingbot.core.data_type.in_flight_order import InFlightOrder, OrderState, OrderUpdate, TradeUpdate
 from hummingbot.core.data_type.order_book_tracker_data_source import OrderBookTrackerDataSource
-from hummingbot.core.data_type.trade_fee import DeductedFromReturnsTradeFee, TradeFeeBase
+from hummingbot.core.data_type.trade_fee import DeductedFromReturnsTradeFee, TokenAmount, TradeFeeBase
 from hummingbot.core.data_type.user_stream_tracker_data_source import UserStreamTrackerDataSource
 from hummingbot.core.event.events import MarketEvent, OrderFilledEvent
 from hummingbot.core.utils.async_utils import safe_gather
@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 
 
 class BiconomyExchange(ExchangePyBase):
-    UPDATE_ORDER_STATUS_MIN_INTERVAL = 1.0
+    UPDATE_ORDER_STATUS_MIN_INTERVAL = 10.0
 
     web_utils = web_utils
 
@@ -174,7 +174,9 @@ class BiconomyExchange(ExchangePyBase):
         **kwargs,
     ) -> Tuple[str, float]:
         order_result = None
-        amount_str = f"{amount:f}"
+        amount_str = (
+            f"{amount*price:f}" if order_type is OrderType.MARKET and trade_type is TradeType.BUY else f"{amount:f}"
+        )
         side_str = CONSTANTS.SIDE_BUY if trade_type is TradeType.BUY else CONSTANTS.SIDE_SELL
         symbol = await self.exchange_symbol_associated_to_pair(trading_pair=trading_pair)
         api_params = {
@@ -335,7 +337,7 @@ class BiconomyExchange(ExchangePyBase):
                 api_params = {
                     "market": await self.exchange_symbol_associated_to_pair(trading_pair=trading_pair),
                     "offset": 0,
-                    "limit": 10,
+                    "limit": 100,
                 }
                 if self._last_poll_timestamp > 0:
                     api_params["start_time"] = query_time
@@ -364,16 +366,22 @@ class BiconomyExchange(ExchangePyBase):
                         continue
 
                     deal = await self._get_trade_from_order_id(exchange_order_id)
-                    trade_id = deal["id"]
+                    trade_id = str(deal["id"])
 
                     if exchange_order_id in order_by_exchange_id_map:
                         # This is a fill for a tracked order
                         tracked_order = order_by_exchange_id_map[exchange_order_id]
+                        fee = TradeFeeBase.new_spot_fee(
+                            fee_schema=self.trade_fee_schema(),
+                            trade_type=tracked_order.trade_type,
+                            flat_fees=[TokenAmount(amount=Decimal(deal["fee"]), token=tracked_order.quote_asset)],
+                        )
                         trade_update = TradeUpdate(
                             trade_id=trade_id,
                             client_order_id=tracked_order.client_order_id,
                             exchange_order_id=exchange_order_id,
                             trading_pair=trading_pair,
+                            fee=fee,
                             fill_base_amount=Decimal(deal["amount"]),
                             fill_quote_amount=Decimal(deal["deal"]),
                             fill_price=Decimal(deal["price"]),
@@ -433,8 +441,13 @@ class BiconomyExchange(ExchangePyBase):
             trades = response["result"]["records"] if "records" in response["result"] else []
 
             for trade in trades:
+                fee = TradeFeeBase.new_spot_fee(
+                    fee_schema=self.trade_fee_schema(),
+                    trade_type=order.trade_type,
+                    flat_fees=[TokenAmount(amount=Decimal(trade["fee"]), token=order.quote_asset)],
+                )
                 trade_update = TradeUpdate(
-                    trade_id=trade["id"],
+                    trade_id=str(trade["id"]),
                     client_order_id=order.client_order_id,
                     exchange_order_id=exchange_order_id,
                     trading_pair=order.trading_pair,
@@ -442,6 +455,7 @@ class BiconomyExchange(ExchangePyBase):
                     fill_quote_amount=Decimal(trade["deal"]),
                     fill_price=Decimal(trade["price"]),
                     fill_timestamp=float(trade["time"]) * 1e-3,
+                    fee=fee,
                 )
                 trade_updates.append(trade_update)
 
@@ -457,14 +471,28 @@ class BiconomyExchange(ExchangePyBase):
         )
 
         updated_order_data = response["result"]
-
-        order_update = OrderUpdate(
-            client_order_id=tracked_order.client_order_id,
-            exchange_order_id=str(updated_order_data["id"]),
-            trading_pair=tracked_order.trading_pair,
-            update_timestamp=tracked_order.last_update_timestamp,
-            new_state=tracked_order.current_state,
-        )
+        if updated_order_data is not None:
+            order_update = OrderUpdate(
+                client_order_id=tracked_order.client_order_id,
+                exchange_order_id=str(updated_order_data["id"]),
+                trading_pair=tracked_order.trading_pair,
+                update_timestamp=tracked_order.last_update_timestamp,
+                new_state=tracked_order.current_state,
+            )
+        else:
+            response = await self._api_post(
+                path_url=CONSTANTS.COMPLETED_ORDER_DETAIL_PATH_URL,
+                data={"order_id": exchange_order_id},
+                is_auth_required=True,
+            )
+            updated_order_data = response["result"]
+            order_update = OrderUpdate(
+                client_order_id=tracked_order.client_order_id,
+                exchange_order_id=str(updated_order_data["id"]),
+                trading_pair=tracked_order.trading_pair,
+                update_timestamp=updated_order_data["ftime"] * 1e-3,
+                new_state=OrderState.FILLED,
+            )
 
         return order_update
 

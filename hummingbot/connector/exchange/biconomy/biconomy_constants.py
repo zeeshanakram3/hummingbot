@@ -25,6 +25,7 @@ CANCEL_ORDER_PATH_URL = "/api/v2/private/trade/cancel"
 MY_TRADES_PATH_URL = "/api/v2/private/order/deals"
 GET_ORDER_PATH_URL = "/api/v2/private/order/pending/detail"
 COMPLETED_ORDERS_PATH_URL = "/api/v2/private/order/finished"
+COMPLETED_ORDER_DETAIL_PATH_URL = "/api/v2/private/order/finished/detail"
 
 WS_HEARTBEAT_TIME_INTERVAL = 150
 
@@ -53,6 +54,7 @@ RATE_LIMITS = [
     RateLimit(limit_id=PLACE_LIMIT_ORDER_PATH_URL, limit=20, time_interval=ONE_SECOND),
     RateLimit(limit_id=PLACE_MARKET_ORDER_PATH_URL, limit=20, time_interval=ONE_SECOND),
     RateLimit(limit_id=GET_ORDER_PATH_URL, limit=20, time_interval=ONE_SECOND),
+    RateLimit(limit_id=COMPLETED_ORDER_DETAIL_PATH_URL, limit=20, time_interval=ONE_SECOND),
     RateLimit(limit_id=CANCEL_ORDER_PATH_URL, limit=20, time_interval=ONE_SECOND),
     RateLimit(limit_id=COMPLETED_ORDERS_PATH_URL, limit=500, time_interval=ONE_SECOND),
 ]
