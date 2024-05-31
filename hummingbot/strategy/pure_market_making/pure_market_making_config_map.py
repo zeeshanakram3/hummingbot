@@ -199,6 +199,12 @@ pure_market_making_config_map = {
                   validator=lambda v: validate_decimal(v, min_value=Decimal("0"), inclusive=False),
                   required_if=lambda: pure_market_making_config_map.get("order_amount").value == 0,
                   prompt_on_new=True),
+    "order_size_variation_pct":
+        ConfigVar(key="order_size_variation_pct",
+                  prompt="Enter the maximum percentage by which each order size should randomly vary (e.g. 5 for 5%) >>> ",
+                  type_str="decimal",
+                  validator=lambda v: validate_decimal(v, min_value=0, max_value=100),
+                  default=Decimal("0")),
     "price_ceiling":
         ConfigVar(key="price_ceiling",
                   prompt="Enter the price point above which only sell orders will be placed "
