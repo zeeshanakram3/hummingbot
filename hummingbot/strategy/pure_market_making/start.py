@@ -23,6 +23,7 @@ def start(self):
     try:
         order_amount = c_map.get("order_amount").value
         quote_order_amount = c_map.get("quote_order_amount").value
+        order_size_variation_pct = c_map.get("order_size_variation_pct").value / Decimal('100')
         order_refresh_time = c_map.get("order_refresh_time").value
         max_order_age = c_map.get("max_order_age").value
         bid_spread = c_map.get("bid_spread").value / Decimal('100')
@@ -121,6 +122,7 @@ def start(self):
             sell_levels=sell_levels,
             order_amount=order_amount,
             quote_order_amount=quote_order_amount,
+            order_size_variation_pct=order_size_variation_pct,
             order_level_spread=order_level_spread,
             buy_level_spread=buy_level_spread,
             sell_level_spread=sell_level_spread,

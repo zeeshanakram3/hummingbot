@@ -2,6 +2,7 @@ import logging
 from decimal import Decimal, ROUND_DOWN
 from math import ceil, floor
 from typing import Dict, List, Optional
+import random
 
 import numpy as np
 import pandas as pd
@@ -54,6 +55,7 @@ cdef class PureMarketMakingStrategy(StrategyBase):
                     ask_spread: Decimal,
                     order_amount: Decimal,
                     quote_order_amount: Decimal,
+                    order_size_variation_pct: Decimal = s_decimal_zero,
                     order_levels: int = 0,
                     buy_levels: int = 1,
                     sell_levels: int = 1,
@@ -110,6 +112,7 @@ cdef class PureMarketMakingStrategy(StrategyBase):
         self._minimum_spread = minimum_spread
         self._order_amount = order_amount
         self._quote_order_amount = quote_order_amount
+        self._order_size_variation_pct = order_size_variation_pct
         self._order_levels = order_levels
         self._buy_levels = order_levels if order_levels > 0 else buy_levels
         self._sell_levels = order_levels if order_levels > 0 else sell_levels
@@ -218,6 +221,15 @@ cdef class PureMarketMakingStrategy(StrategyBase):
     @quote_order_amount.setter
     def quote_order_amount(self, value: Decimal):
         self._quote_order_amount = value
+
+    @property
+    def order_size_variation_pct(self) -> Decimal:
+        return self._order_size_variation_pct
+
+    @order_size_variation_pct.setter
+    def order_size_variation_pct(self, value: Decimal):
+        self._order_size_variation_pct = value
+
 
     @property
     def order_levels(self) -> int:
@@ -660,7 +672,7 @@ cdef class PureMarketMakingStrategy(StrategyBase):
         no_sells = len([o for o in active_orders if not o.is_buy and o.client_order_id and
                         not self._hanging_orders_tracker.is_order_id_in_hanging_orders(o.client_order_id)])
         active_orders.sort(key=lambda x: x.price, reverse=True)
-        columns = ["Level", "Type", "Price", "Spread", "Amount (Orig)", "Amount (Adj)", "Quote (~Orig)", "Age"]
+        columns = ["Level", "Type", "Price", "Spread", "Amount (Adj)", "Quote (Adj)", "Age"]
         data = []
         lvl_buy, lvl_sell = 0, 0
         for idx in range(0, len(active_orders)):
@@ -687,13 +699,13 @@ cdef class PureMarketMakingStrategy(StrategyBase):
                 level = "hang"
             spread = 0 if price == 0 else abs(order.price - price)/price
             age = pd.Timestamp(order_age(order, self._current_timestamp), unit='s').strftime('%H:%M:%S')
-            quote_amount_orig = amount_orig * order.price
+            quote_amount_orig = order.quantity * order.price
             data.append([
                 level,
                 "buy" if order.is_buy else "sell",
                 float(order.price),
                 f"{spread:.2%}",
-                amount_orig,
+                # amount_orig, # Commented out because it's not used in the output
                 float(order.quantity),
                 quote_amount_orig,
                 age
@@ -852,6 +864,12 @@ cdef class PureMarketMakingStrategy(StrategyBase):
         finally:
             self._last_timestamp = timestamp
 
+    def randomize_order_size(self, size: Decimal) -> Decimal:
+        random_factor = Decimal("1") + Decimal(
+            random.uniform(-float(self._order_size_variation_pct), float(self._order_size_variation_pct))
+        )
+        return size * random_factor
+
     def get_order_amount(self, reference_price: Decimal) -> Decimal:
         order_amount = self._order_amount
         if self._quote_order_amount is not None:
@@ -915,7 +933,9 @@ cdef class PureMarketMakingStrategy(StrategyBase):
                     order_amount = self.get_order_amount(price)
                     buy_order_level_amount, _ = self.get_order_level_amount(price)
                     size = order_amount + (buy_order_level_amount * level)
+                    size = self.randomize_order_size(size) # Randomize order size
                     size = market.c_quantize_order_amount(self.trading_pair, size)
+                    sys.stdout.write(f"Random size: {size}\n")
                     if size > 0:
                         buys.append(PriceSize(price, size))
             if not sell_reference_price.is_nan():
@@ -925,7 +945,9 @@ cdef class PureMarketMakingStrategy(StrategyBase):
                     order_amount = self.get_order_amount(price)
                     _, sell_order_level_amount = self.get_order_level_amount(price)
                     size = order_amount + (sell_order_level_amount * level)
+                    size = self.randomize_order_size(size) # Randomize order size
                     size = market.c_quantize_order_amount(self.trading_pair, size)
+                    sys.stdout.write(f"Random size: {size}\n")
                     if size > 0:
                         sells.append(PriceSize(price, size))
 

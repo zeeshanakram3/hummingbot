@@ -44,6 +44,9 @@ order_amount: null
 # Size of your bid and ask order (quote asset). Can be null if order_amount is set.
 quote_order_amount: null
 
+# The maximum percentage by which you want each order size should randomly vary (e.g. 5 for 5%)
+order_size_variation_pct: null
+
 # Price band ceiling.
 price_ceiling: null
 
