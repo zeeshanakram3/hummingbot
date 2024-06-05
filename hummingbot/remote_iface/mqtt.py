@@ -32,6 +32,7 @@ from hummingbot.core.utils.async_utils import call_sync, safe_ensure_future
 from hummingbot.notifier.notifier_base import NotifierBase
 from hummingbot.remote_iface.messages import (
     MQTT_STATUS_CODE,
+    BalanceCommandMessage,
     BalanceLimitCommandMessage,
     BalancePaperCommandMessage,
     CommandShortcutMessage,
@@ -58,6 +59,7 @@ class CommandTopicSpecs:
     IMPORT: str = '/import'
     STATUS: str = '/status'
     HISTORY: str = '/history'
+    BALANCE: str = '/balance'
     BALANCE_LIMIT: str = '/balance/limit'
     BALANCE_PAPER: str = '/balance/paper'
     COMMAND_SHORTCUT: str = '/command_shortcuts'
@@ -97,6 +99,7 @@ class MQTTCommands:
         self._import_uri = f'{topic_prefix}{TopicSpecs.COMMANDS.IMPORT}'
         self._status_uri = f'{topic_prefix}{TopicSpecs.COMMANDS.STATUS}'
         self._history_uri = f'{topic_prefix}{TopicSpecs.COMMANDS.HISTORY}'
+        self._balance_uri = f'{topic_prefix}{TopicSpecs.COMMANDS.BALANCE}'
         self._balance_limit_uri = f'{topic_prefix}{TopicSpecs.COMMANDS.BALANCE_LIMIT}'
         self._balance_paper_uri = f'{topic_prefix}{TopicSpecs.COMMANDS.BALANCE_PAPER}'
         self._shortcuts_uri = f'{topic_prefix}{TopicSpecs.COMMANDS.COMMAND_SHORTCUT}'
@@ -133,6 +136,11 @@ class MQTTCommands:
             rpc_name=self._history_uri,
             msg_type=HistoryCommandMessage,
             on_request=self._on_cmd_history
+        )
+        self._node.create_rpc(
+            rpc_name=self._balance_uri,
+            msg_type=BalanceCommandMessage,
+            on_request=self._on_cmd_balance
         )
         self._node.create_rpc(
             rpc_name=self._balance_limit_uri,
@@ -318,6 +326,24 @@ class MQTTCommands:
                 trades = self._hb_app.get_history_trades_json(msg.days)
                 if trades:
                     response.trades = trades
+        except Exception as e:
+            response.status = MQTT_STATUS_CODE.ERROR
+            response.msg = str(e)
+        return response
+
+    def _on_cmd_balance(self, msg: BalanceCommandMessage.Request):
+        response = BalanceCommandMessage.Response()
+        timeout = 30  # seconds
+        try:
+            res = call_sync(
+                self._hb_app.show_balances_json(),
+                loop=self._ev_loop,
+                timeout=timeout
+            )
+            response.data = res if res is not None else ''
+        except asyncio.exceptions.TimeoutError:
+            response.msg = f'Hummingbot status command timed out after {timeout} seconds'
+            response.status = MQTT_STATUS_CODE.ERROR
         except Exception as e:
             response.status = MQTT_STATUS_CODE.ERROR
             response.msg = str(e)

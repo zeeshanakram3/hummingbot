@@ -111,6 +111,46 @@ class BalanceCommand:
 
         self.notify(f"\n\nExchanges Total: {global_token_symbol} {exchanges_total:.0f}    ")
 
+    async def show_balances_json(
+        self  # type: HummingbotApplication
+    ):
+        global_token_symbol = self.client_config_map.global_token.global_token_symbol
+        total_col_name = f"Total ({global_token_symbol})"
+        sum_not_for_show_name = "sum_not_for_show"
+        self.notify("Updating balances, please wait...")
+        network_timeout = float(self.client_config_map.commands_timeout.other_commands_timeout)
+        try:
+            all_ex_bals = await asyncio.wait_for(
+                UserBalances.instance().all_balances_all_exchanges(self.client_config_map), network_timeout
+            )
+        except asyncio.TimeoutError:
+            self.notify("\nA network error prevented the balances to update. See logs for more details.")
+            raise
+        all_ex_avai_bals = UserBalances.instance().all_available_balances_all_exchanges()
+
+        exchanges_total = 0
+        balances_json = {}
+
+        for exchange, bals in all_ex_bals.items():
+            df, allocated_total = await self.exchange_balances_extra_df(exchange, bals, all_ex_avai_bals.get(exchange, {}))
+            if df.empty:
+                balances_json[exchange] = {"message": "You have no balance on this exchange."}
+            else:
+                balance_data = df.drop(sum_not_for_show_name, axis=1).to_dict(orient='records')
+                total_balance = df[total_col_name].sum()
+                allocated_percentage = 0
+                if df[sum_not_for_show_name].sum() != Decimal("0"):
+                    allocated_percentage = allocated_total / df[sum_not_for_show_name].sum()
+                balances_json[exchange] = {
+                    "balances": balance_data,
+                    "total": str(total_balance),
+                    "allocated_percentage": f"{allocated_percentage:.2%}"
+                }
+                exchanges_total += total_balance
+
+        balances_json["exchanges_total"] = str(exchanges_total)
+        return balances_json
+
     async def exchange_balances_extra_df(self,  # type: HummingbotApplication
                                          exchange: str,
                                          ex_balances: Dict[str, Decimal],
