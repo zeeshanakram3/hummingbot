@@ -3,9 +3,9 @@ services:
   hummingbot:
     container_name: hummingbot
     image: hummingbot/hummingbot:latest
-#    build: Uncomment this and comment image if you want to build it locally
-#      context: .
-#      dockerfile: Dockerfile
+    # build: # Uncomment this and comment image if you want to build it locally
+    #   context: .
+    #   dockerfile: Dockerfile
     volumes:
       - ./conf:/home/hummingbot/conf
       - ./conf/connectors:/home/hummingbot/conf/connectors
@@ -43,3 +43,15 @@ services:
   #    - "./certs:/home/gateway/certs"
   #  environment:
   #    - GATEWAY_PASSPHRASE=a
+
+
+  telegram_bot:
+    container_name: telegram_bot
+    image: hummingbot/telegram-bot
+    restart: unless-stopped
+    environment:
+      - TELEGRAM_BOT_TOKEN=YOUR_TELEGRAM_BOT_TOKEN
+      - BROKER_HOST=broker
+      - BROKER_PORT=1883
+      - BROKER_USERNAME=admin
+      - BROKER_PASSWORD=admin
