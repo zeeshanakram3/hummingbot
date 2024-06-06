@@ -49,9 +49,12 @@ services:
     container_name: telegram_bot
     image: hummingbot/telegram-bot
     restart: unless-stopped
+    volumes:
+      - ./telegram-bot/bots-info.json:/telegram-bot/bots-info.json
     environment:
       - TELEGRAM_BOT_TOKEN=YOUR_TELEGRAM_BOT_TOKEN
       - BROKER_HOST=broker
       - BROKER_PORT=1883
       - BROKER_USERNAME=admin
       - BROKER_PASSWORD=admin
+      - BOTS_INFO_FILE=bots-info.json
