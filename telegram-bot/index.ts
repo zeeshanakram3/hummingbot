@@ -31,6 +31,7 @@ interface ExchangeData {
   balances?: BalanceData[]
   total?: string
   allocated_percentage?: string
+  exchange?: string // Set by the code
 }
 
 interface BalanceResponse {
@@ -38,6 +39,8 @@ interface BalanceResponse {
   msg: string
   data: Record<string, ExchangeData>
 }
+
+type AccountName = string
 
 const BOTS_INFO_MAP = new Map<string, BotInfo>()
 
@@ -67,9 +70,9 @@ try {
 bot.onText(/\/balance (\w+)/, async (msg, match) => {
   const chatId = msg.chat.id
   const botId = match ? match[1] : ''
-  const data = await getBalance(botId)
-  const message = formatBalance(data)
-  bot.sendMessage(chatId, message, { parse_mode: 'Markdown' })
+  const balances = await getBalancesForAllBots([botId])
+  const message = formatBalance(balances)
+  bot.sendMessage(chatId, message || 'Error!', { parse_mode: 'Markdown' })
 })
 
 // Matches "/status <bot-ID>"
@@ -149,7 +152,7 @@ async function getBalance(botId: string): Promise<BalanceResponse | undefined> {
 }
 
 // Function to execute the command and get the balance by bot ID
-async function getBalancesForAllBots(botIds: string[]): Promise<Record<string, ExchangeData>> {
+async function getBalancesForAllBots(botIds: string[]): Promise<Record<AccountName, ExchangeData>> {
   const balances = await Promise.all(
     botIds.map(async (botId) => {
       const botBalance = await getBalance(botId)
@@ -162,19 +165,17 @@ async function getBalancesForAllBots(botIds: string[]): Promise<Record<string, E
 // Function to aggregate balances by account
 function aggregateBalancesByAccount(
   botBalances: { botId: string; botBalance?: BalanceResponse }[]
-): Record<string, ExchangeData> {
-  const accountBalances: Record<string, ExchangeData> = {}
+): Record<AccountName, ExchangeData> {
+  const accountBalances: Record<AccountName, ExchangeData> = {}
 
   botBalances.forEach(({ botId, botBalance }) => {
     const botInfo = BOTS_INFO_MAP.get(botId)
     if (botInfo) {
       botInfo.accounts.forEach((account) => {
         // Extract exchange name using account
-        const exchange = Object.keys(botBalance?.data || {}).find((botExchange) =>
-          botExchange.includes(account.split('_')[0].toLowerCase())
-        )
-
-        if (botBalance?.data && exchange) {
+        const exchange = getExchangeFromAccount(account)
+        if (botBalance?.data) {
+          botBalance.data[exchange].exchange = exchange
           accountBalances[account] = botBalance.data[exchange]
         }
       })
@@ -185,34 +186,35 @@ function aggregateBalancesByAccount(
 }
 
 // Function to format balance data into a message
-function formatBalance(data?: BalanceResponse): string {
-  if (!data) {
-    return 'Error!'
-  }
-
-  const exchanges = Object.keys(data.data)
+function formatBalance(data: Record<AccountName, ExchangeData>): string {
   let message = ''
 
-  exchanges.forEach((exchange) => {
-    message += `Exchange: *${exchange}*\n`
+  Object.keys(data).forEach((account) => {
+    message += `Exchange: *${data[account].exchange}*\n`
+    message += `Account: *${account}*\n`
 
-    if (data.data[exchange].message) {
-      message += `${data.data[exchange].message}\n\n`
+    if (data[account].message) {
+      message += `${data[account].message}\n\n`
       return
     }
 
-    data.data[exchange].balances?.forEach((balance) => {
+    data[account].balances?.forEach((balance) => {
       message += `  *${balance.Asset}*: _${balance.Total} (${balance['Total ($)']}$)_\n`
     })
 
-    message += `Total: *${data.data[exchange].total}*$\nAllocated: *${data.data[exchange].allocated_percentage}*\n\n`
+    message += `Total: *${data[account].total}*$\nAllocated: *${data[account].allocated_percentage}*\n\n`
   })
 
   return message
 }
 
+function getExchangeFromAccount(account: string): string {
+  const exchange = account.split('_')[0].toLowerCase()
+  return exchange === 'gate' ? `${exchange}_io` : exchange
+}
+
 // Function to format all balances into a message
-function formatAllBalances(data: Record<string, ExchangeData>): string {
+function formatAllBalances(data: Record<AccountName, ExchangeData>): string {
   let message = ''
   const assetSums: Record<string, { total: number; totalValue: number }> = {}
 
