@@ -30,6 +30,6 @@ COPY . .
 # Set PATH to include local bin
 ENV PATH=/root/.local/bin:$PATH
 
-CMD [ "node", "index.mjs" ]
+CMD [ "npx", "ts-node", "index.ts" ]
 
 EXPOSE 3131

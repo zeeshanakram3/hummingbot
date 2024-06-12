@@ -9,6 +9,11 @@ const port = process.env.BROKER_PORT
 const username = process.env.BROKER_USERNAME
 const password = process.env.BROKER_PASSWORD
 
+const threshold = parseFloat(process.env.BALANCE_THRESHOLD_IN_USD || '100')
+const interval = parseInt(process.env.MONITORING_INTERVAL_IN_MINS || '30')
+const monitoredBotIds = process.env.MONITORED_BOT_IDS ? process.env.MONITORED_BOT_IDS.split(',') : []
+
+const chatId = process.env.TELEGRAM_ALERT_CHAT_ID || ''
 const bot = new TelegramBot(token, { polling: true })
 
 const commlibCliBaseCmd = `commlib-cli --host ${host} --port ${port} --username ${username} --password ${password} --btype mqtt`
@@ -266,15 +271,16 @@ async function getStatus(botId: string): Promise<string> {
     exec(`${commlibCliBaseCmd} rpcc 'hbot/${botId}/status' {}`, { encoding: 'utf8' }, (error, stdout) => {
       if (error) {
         console.error('Error:', error)
-        resolve('Error!')
+        resolve(`\u{274C} Error!`)
       } else {
         try {
           const jsonString = stdout.replace(/'/g, '"')
           const data = JSON.parse(jsonString)
-          resolve(data.msg || 'OK!')
+          const status = data.msg || 'OK!'
+          resolve(`\u{2705} ${status}`)
         } catch (parseError) {
           console.error('Parse Error:', parseError)
-          resolve('Error!')
+          resolve(`\u{274C} Error!`)
         }
       }
     })
@@ -311,3 +317,25 @@ async function updateJoystreamPrice() {
 }
 
 setInterval(updateJoystreamPrice, 10 * 1000) // Update every 10 seconds
+
+// Function to check balances periodically
+async function checkBalances() {
+  const botIds = monitoredBotIds.length ? monitoredBotIds : Array.from(BOTS_INFO_MAP.keys())
+  const balances = await getBalancesForAllBots(botIds)
+
+  Object.keys(balances).forEach((account) => {
+    balances[account].balances?.forEach((balance) => {
+      if (balance['Total ($)'] < threshold) {
+        bot.sendMessage(
+          chatId,
+          //eslint-disable-next-line
+          `\u{2757} *${balance.Asset}* balance of account *${account}* is less than *$${threshold}*\. Current balance: *${balance.Total}(${balance['Total ($)']}$)*`,
+          { parse_mode: 'Markdown' }
+        )
+      }
+    })
+  })
+}
+
+// Set an interval to check balances every x minutes
+setInterval(checkBalances, interval * 60 * 1000)
