@@ -46,6 +46,7 @@ interface BalanceResponse {
 }
 
 type AccountName = string
+type BotConfig = any
 
 const BOTS_INFO_MAP = new Map<string, BotInfo>()
 
@@ -111,6 +112,15 @@ bot.onText(/\/balance_all/, async (msg) => {
   const botIds = Array.from(BOTS_INFO_MAP.keys())
   const balances = await getBalancesForAllBots(botIds)
   const message = formatAllBalances(balances)
+  bot.sendMessage(chatId, message || 'Error!', { parse_mode: 'Markdown' })
+})
+
+// Matches "/config <bot-ID>"
+bot.onText(/\/config (\w+)?/, async (msg, match) => {
+  const chatId = msg.chat.id
+  const botId = match ? match[1] : ''
+  const config = await getConfig(botId)
+  const message = formatConfig(config)
   bot.sendMessage(chatId, message || 'Error!', { parse_mode: 'Markdown' })
 })
 
@@ -305,6 +315,59 @@ function formatBotList(): string {
   return message
 }
 
+// Function to execute the command and get the status
+async function getConfig(botId: string): Promise<BotConfig> {
+  return new Promise((resolve) => {
+    exec(`${commlibCliBaseCmd} rpcc 'hbot/${botId}/config' {}`, { encoding: 'utf8' }, (error, stdout) => {
+      if (error) {
+        console.error('Error:', error)
+        resolve({})
+      } else {
+        try {
+          const jsonString = stdout
+            .replace(/'/g, '"')
+            .replace(/None/g, 'null')
+            .replace(/True/g, 'true')
+            .replace(/False/g, 'false')
+          const data = JSON.parse(jsonString)
+          resolve(data.config.strategy)
+        } catch (parseError) {
+          console.error('Parse Error:', parseError)
+          resolve({})
+        }
+      }
+    })
+  })
+}
+
+function formatConfig(config: BotConfig): string {
+  let message = ''
+
+  if (config['strategy'] === 'pure_market_making') {
+    for (const key in config) {
+      // Filter not needed keys
+      delete config['price_band_refresh_time']
+      delete config['inventory_target_base_pct']
+      delete config['custom_api_update_interval']
+      delete config['filled_order_delay']
+      delete config['hanging_orders_cancel_pct']
+      delete config['price_source']
+
+      // Filter out default values (-ve/0/1/None) and boolean values to construct a clean message
+      if (config[key] <= 0 || config[key] === 1 || config[key] === null || typeof config[key] === 'boolean') {
+        continue
+      }
+      message += `${key.replace(/_/g, ' ')}: *${config[key]}*\n`
+    }
+  } else if (config['strategy'] === 'amm_arb') {
+    for (const key in config) {
+      message += `${key.replace(/_/g, ' ')}: *${config[key]}*\n`
+    }
+  }
+
+  return message
+}
+
 // MEXC as price oracle
 async function updateJoystreamPrice() {
   try {
@@ -321,6 +384,7 @@ setInterval(updateJoystreamPrice, 10 * 1000) // Update every 10 seconds
 // Function to check balances periodically
 async function checkBalances() {
   const botIds = monitoredBotIds.length ? monitoredBotIds : Array.from(BOTS_INFO_MAP.keys())
+  console.log('Checking balances for bots:', botIds)
   const balances = await getBalancesForAllBots(botIds)
 
   Object.keys(balances).forEach((account) => {
