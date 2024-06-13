@@ -250,6 +250,8 @@ function formatAllBalances(data: Record<AccountName, ExchangeData>): string {
       assetSums[balance.Asset].total += balance.Total
       assetSums[balance.Asset].totalValue += balance['Total ($)']
     })
+
+    message += `Allocated: ${data[account].allocated_percentage}\n`
   })
 
   message += `\n*Total:*\n`
