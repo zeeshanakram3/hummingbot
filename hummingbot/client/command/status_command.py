@@ -81,6 +81,13 @@ class StatusCommand:
             self._pmm_script_iterator.request_status()
         return status
 
+    async def strategy_status_json(self):
+        if asyncio.iscoroutinefunction(self.strategy.json_status):
+            status = await self.strategy.json_status()
+        else:
+            status = self.strategy.json_status()
+        return status
+
     def application_warning(self):
         # Application warnings.
         self._expire_old_application_warnings()
