@@ -784,6 +784,42 @@ cdef class PureMarketMakingStrategy(StrategyBase):
 
         return "\n".join(lines)
 
+    def json_status(self) -> dict:
+        status = {}
+
+        if not self._all_markets_ready:
+            status["error"] = "Market connectors are not ready."
+            return status
+
+        warnings = []
+        warnings.extend(self._ping_pong_warning_lines)
+        warnings.extend(self.network_warning([self._market_info]))
+
+        # Market status
+        markets_df = map_df_to_str(self.market_status_data_frame([self._market_info]))
+        status["markets"] = markets_df.to_dict(orient='records')
+
+        # Assets status
+        assets_df = map_df_to_str(self.pure_mm_assets_df(not self._inventory_skew_enabled))
+        if self._inventory_skew_enabled:
+            inventory_skew_df = map_df_to_str(self.inventory_skew_stats_data_frame())
+            assets_df = assets_df.append(inventory_skew_df)
+        status["assets"] = assets_df.to_dict(orient='records')
+
+        # Active orders
+        if len(self.active_orders) > 0:
+            orders_df = map_df_to_str(self.active_orders_df())
+            status["orders"] = orders_df.to_dict(orient='records')
+        else:
+            status["orders"] = "No active maker orders."
+
+        warnings.extend(self.balance_warning([self._market_info]))
+
+        if len(warnings) > 0:
+            status["warnings"] = warnings
+
+        return status
+
     # The following exposed Python functions are meant for unit tests
     # ---------------------------------------------------------------
     def execute_orders_proposal(self, proposal: Proposal):
