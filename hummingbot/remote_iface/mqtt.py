@@ -298,12 +298,17 @@ class MQTTCommands:
                 response.status = MQTT_STATUS_CODE.ERROR
                 response.msg = 'No strategy is currently running!'
                 return response
-            res = call_sync(
-                self._hb_app.strategy_status_json(),
-                loop=self._ev_loop,
-                timeout=timeout
-            )
-            response.msg = res if res is not None else ''
+            if self._hb_app.strategy_name != "pure_market_making":
+                self._ev_loop.call_soon_threadsafe(
+                    self._hb_app.status
+                )
+            else:
+                res = call_sync(
+                    self._hb_app.strategy_status_json(),
+                    loop=self._ev_loop,
+                    timeout=timeout
+                )
+                response.msg = res if res is not None else ''
         except asyncio.exceptions.TimeoutError:
             response.msg = f'Hummingbot status command timed out after {timeout} seconds'
             response.status = MQTT_STATUS_CODE.ERROR
