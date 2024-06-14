@@ -31,6 +31,20 @@ interface BalanceData {
   Allocated: string
 }
 
+interface StatusData {
+  orders: OrderData[]
+}
+
+interface OrderData {
+  Level: string
+  Type: 'sell' | 'buy'
+  Price: string
+  Spread: string
+  'Amount (Adj)': string
+  'Quote (Adj)': string
+  Age: string
+}
+
 interface ExchangeData {
   message?: string // "You have no balance on this exchange." (if no balance is available)
   balances?: BalanceData[]
@@ -233,7 +247,8 @@ function formatAllBalances(data: Record<AccountName, ExchangeData>): string {
   let message = ''
   const assetSums: Record<string, { total: number; totalValue: number }> = {}
 
-  Object.keys(data).forEach((account) => {
+  const accounts = Object.keys(data).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+  accounts.forEach((account) => {
     message += `\nAccount: *${account}*\n`
 
     if (data[account].message) {
@@ -266,21 +281,23 @@ function formatAllBalances(data: Record<AccountName, ExchangeData>): string {
 }
 
 // Function to get statuses of specified bots from BOTS_INFO_MAP asynchronously
-async function getStatuses(botIds: string[]): Promise<{ name: string | undefined; status: string }[]> {
+async function getStatuses(
+  botIds: string[]
+): Promise<{ botId: string; name: string | undefined; status: StatusData | string }[]> {
   const statuses = await Promise.all(
     botIds.map(async (botId) => {
       const botInfo = BOTS_INFO_MAP.get(botId)
       const status = await getStatus(botId)
-      return { name: botInfo?.name, status: status }
+      return { botId, name: botInfo?.name, status: status }
     })
   )
   return statuses
 }
 
 // Function to execute the command and get the status
-async function getStatus(botId: string): Promise<string> {
+async function getStatus(botId: string): Promise<StatusData | string> {
   return new Promise((resolve) => {
-    exec(`${commlibCliBaseCmd} rpcc 'hbot/${botId}/status' {}`, { encoding: 'utf8' }, (error, stdout) => {
+    exec(`${commlibCliBaseCmd} rpcc 'hbot/${botId}/status' {}`, {}, (error, stdout) => {
       if (error) {
         console.error('Error:', error)
         resolve(`\u{274C} Error!`)
@@ -288,8 +305,12 @@ async function getStatus(botId: string): Promise<string> {
         try {
           const jsonString = stdout.replace(/'/g, '"')
           const data = JSON.parse(jsonString)
-          const status = data.msg || 'OK!'
-          resolve(`\u{2705} ${status}`)
+          if (typeof data.msg === 'string') {
+            const status = data.msg || 'OK'
+            resolve(`\u{2705} ${status}`)
+          } else {
+            resolve(data.msg)
+          }
         } catch (parseError) {
           console.error('Parse Error:', parseError)
           resolve(`\u{274C} Error!`)
@@ -300,13 +321,46 @@ async function getStatus(botId: string): Promise<string> {
 }
 
 // Function to format all bot statuses into a message
-function formatStatuses(data: { name: string | undefined; status: string }[]): string {
+function formatStatuses(data: { botId: string; name: string | undefined; status: StatusData | string }[]): string {
   let message = ''
   data.forEach((bot) => {
-    message += `Bot Name: *${bot.name}*\nStatus: *${bot.status}*\n\n`
+    message += `Bot ID: *${bot.botId}*\nBot Name: *${bot.name}*\n`
+    if (typeof bot.status === 'string') {
+      message += `Status: *${bot.status}*\n\n`
+    } else {
+      message += `Status: *\u{2705} OK*\n`
+
+      if (typeof bot.status.orders === 'string') {
+        message += `Liquidity: *${bot.status.orders}*\n\n`
+        return
+      }
+
+      const buyOrders = bot.status.orders.filter((order) => order.Type === 'buy')
+      const sellOrders = bot.status.orders.filter((order) => order.Type === 'sell')
+
+      const buyQuoteSum = buyOrders.reduce((sum, order) => sum + parseFloat(order['Quote (Adj)']), 0)
+      const sellQuoteSum = sellOrders.reduce((sum, order) => sum + parseFloat(order['Quote (Adj)']), 0)
+
+      const buySpreadRange = getSpreadRange(buyOrders)
+      const sellSpreadRange = getSpreadRange(sellOrders)
+
+      message += `Liquidity:\n  *Buy*: _${buySpreadRange} ($${buyQuoteSum.toFixed(
+        2
+      )})_\n  *Sell:* _${sellSpreadRange} ($${sellQuoteSum.toFixed(2)})_\n\n`
+    }
   })
   return message
 }
+
+function getSpreadRange(orders: OrderData[]): string {
+  if (orders.length === 0) return 'N/A'
+  const spreads = orders.map((order) => parseFloat(order.Spread))
+  const minSpread = Math.min(...spreads).toFixed(2)
+  const maxSpread = Math.max(...spreads).toFixed(2)
+  return `${minSpread}% - ${maxSpread}%`
+}
+
+// The rest of your code remains unchanged
 
 // Function to format the bot list into a message
 function formatBotList(): string {
