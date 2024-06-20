@@ -323,6 +323,8 @@ async function getStatus(botId: string): Promise<StatusData | string> {
 // Function to format all bot statuses into a message
 function formatStatuses(data: { botId: string; name: string | undefined; status: StatusData | string }[]): string {
   let message = ''
+  let buyLiquidity = 0
+  let sellLiquidity = 0
   data.forEach((bot) => {
     message += `Bot ID: *${bot.botId}*\nBot Name: *${bot.name}*\n`
     if (typeof bot.status === 'string') {
@@ -340,15 +342,20 @@ function formatStatuses(data: { botId: string; name: string | undefined; status:
 
       const buyQuoteSum = buyOrders.reduce((sum, order) => sum + parseFloat(order['Quote (Adj)']), 0)
       const sellQuoteSum = sellOrders.reduce((sum, order) => sum + parseFloat(order['Quote (Adj)']), 0)
+      buyLiquidity += buyQuoteSum
+      sellLiquidity += sellQuoteSum
 
       const buySpreadRange = getSpreadRange(buyOrders)
       const sellSpreadRange = getSpreadRange(sellOrders)
 
       message += `Liquidity:\n  *Buy*: _${buySpreadRange} ($${buyQuoteSum.toFixed(
         2
-      )})_\n  *Sell:* _${sellSpreadRange} ($${sellQuoteSum.toFixed(2)})_\n\n`
+      )})_\n  *Sell*: _${sellSpreadRange} ($${sellQuoteSum.toFixed(2)})_\n\n`
     }
   })
+  message += `*Total Liquidity*:\n  *Buy*: _$${buyLiquidity.toFixed(2)}_\n  *Sell*: _$${sellLiquidity.toFixed(
+    2
+  )}_\n  *Total*: _$${(buyLiquidity + sellLiquidity).toFixed(2)}_`
   return message
 }
 
