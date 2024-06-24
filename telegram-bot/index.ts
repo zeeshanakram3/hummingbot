@@ -203,7 +203,7 @@ function aggregateBalancesByAccount(
       botInfo.accounts.forEach((account) => {
         // Extract exchange name using account
         const exchange = getExchangeFromAccount(account)
-        if (botBalance?.data) {
+        if (botBalance?.data && Object.keys(botBalance?.data).includes(exchange)) {
           botBalance.data[exchange].exchange = exchange
           accountBalances[account] = botBalance.data[exchange]
         }
