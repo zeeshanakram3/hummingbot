@@ -138,6 +138,26 @@ bot.onText(/\/config (\w+)?/, async (msg, match) => {
   bot.sendMessage(chatId, message || 'Error!', { parse_mode: 'Markdown' })
 })
 
+// Matches "/config_all"
+bot.onText(/\/config_all/, async (msg) => {
+  const chatId = msg.chat.id
+  const botIds = Array.from(BOTS_INFO_MAP.keys())
+  const configs = await getConfigsForAllBots(botIds)
+  const filteredConfigs = configs.filter((bot) => bot.config.strategy === 'pure_market_making')
+  await sendConfigsInSeparateMessages(chatId, filteredConfigs)
+})
+
+// Function to send each configuration in a separate message
+async function sendConfigsInSeparateMessages(
+  chatId: number,
+  configs: { botId: string; name: string | undefined; config: BotConfig }[]
+) {
+  for (const botConfig of configs) {
+    const message = `Bot ID: *${botConfig.botId}*\nBot Name: *${botConfig.name}*\n${formatConfig(botConfig.config)}`
+    await bot.sendMessage(chatId, message || 'No config found for this bot.', { parse_mode: 'Markdown' })
+  }
+}
+
 // Function to execute the command and get the balance
 async function getBalance(botId: string): Promise<BalanceResponse | undefined> {
   return new Promise((resolve) => {
@@ -403,21 +423,39 @@ async function getConfig(botId: string): Promise<BotConfig> {
   })
 }
 
+// Function to get configurations of specified bots from BOTS_INFO_MAP asynchronously
+async function getConfigsForAllBots(
+  botIds: string[]
+): Promise<{ botId: string; name: string | undefined; config: BotConfig }[]> {
+  const configs = await Promise.all(
+    botIds.map(async (botId) => {
+      const botInfo = BOTS_INFO_MAP.get(botId)
+      const config = await getConfig(botId)
+      return { botId, name: botInfo?.name, config: config }
+    })
+  )
+  return configs
+}
+
 function formatConfig(config: BotConfig): string {
   let message = ''
 
   if (config['strategy'] === 'pure_market_making') {
     for (const key in config) {
       // Filter not needed keys
-      delete config['price_band_refresh_time']
+      delete config['minimum_spread']
       delete config['inventory_target_base_pct']
       delete config['custom_api_update_interval']
-      delete config['filled_order_delay']
       delete config['hanging_orders_cancel_pct']
-      delete config['price_source']
 
-      // Filter out default values (-ve/0/1/None) and boolean values to construct a clean message
-      if (config[key] <= 0 || config[key] === 1 || config[key] === null || typeof config[key] === 'boolean') {
+      // Filter out default values (-1/0/1/None) and boolean values to construct a clean message
+      if (
+        config[key] === -1 ||
+        config[key] === 0 ||
+        config[key] === 1 ||
+        config[key] === null ||
+        typeof config[key] === 'boolean'
+      ) {
         continue
       }
       message += `${key.replace(/_/g, ' ')}: *${config[key]}*\n`
