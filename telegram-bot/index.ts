@@ -490,7 +490,10 @@ async function checkBalances() {
 
   Object.keys(balances).forEach((account) => {
     balances[account].balances?.forEach((balance) => {
-      if (balance['Total ($)'] < threshold) {
+      if (
+        balance['Total ($)'] < threshold &&
+        (balance.Asset === 'JOY' || balance.Asset === 'USDT' || balance.Asset === 'USDC')
+      ) {
         bot.sendMessage(
           chatId,
           //eslint-disable-next-line
