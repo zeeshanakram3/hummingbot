@@ -310,12 +310,15 @@ function formatAllBalances(data: Record<AccountName, ExchangeData>): string {
 // Function to get statuses of specified bots from BOTS_INFO_MAP asynchronously
 async function getStatuses(
   botIds: string[]
-): Promise<{ botId: string; name: string | undefined; status: StatusData | string }[]> {
+): Promise<{ botId: string; name: string | undefined; accounts: string[]; status: StatusData | string }[]> {
   const statuses = await Promise.all(
     botIds.map(async (botId) => {
       const botInfo = BOTS_INFO_MAP.get(botId)
       const status = await getStatus(botId)
-      return { botId, name: botInfo?.name, status: status }
+      const name = botInfo?.name
+      const accounts = botInfo?.accounts || []
+
+      return { botId, name, accounts, status }
     })
   )
   return statuses
@@ -348,12 +351,14 @@ async function getStatus(botId: string): Promise<StatusData | string> {
 }
 
 // Function to format all bot statuses into a message
-function formatStatuses(data: { botId: string; name: string | undefined; status: StatusData | string }[]): string {
+function formatStatuses(
+  data: { botId: string; name: string | undefined; accounts: string[]; status: StatusData | string }[]
+): string {
   let message = ''
   let buyLiquidity = 0
   let sellLiquidity = 0
   data.forEach((bot) => {
-    message += `Bot ID: *${bot.botId}*\nBot Name: *${bot.name}*\n`
+    message += `Bot ID: *${bot.botId}*\nBot Name: *${bot.name}*\nAccounts: *${bot.accounts.join(', ')}*\n`
     if (typeof bot.status === 'string') {
       message += `Status: *${bot.status}*\n\n`
     } else {
