@@ -185,20 +185,25 @@ class BiconomyExchange(ExchangePyBase):
             "amount": amount_str,
         }
 
+        order_result = None
+
         try:
             if order_type is OrderType.LIMIT:
                 api_params["price"] = f"{price:f}"
                 order_result = await self._api_post(
                     path_url=CONSTANTS.PLACE_LIMIT_ORDER_PATH_URL, data=api_params, is_auth_required=True
                 )
-                o_id = order_result["result"]["id"]
-                transact_time = self.current_timestamp
             else:
                 order_result = await self._api_post(
                     path_url=CONSTANTS.PLACE_MARKET_ORDER_PATH_URL, data=api_params, is_auth_required=True
                 )
+
+            if order_result["result"] is not None:
                 o_id = order_result["result"]["id"]
                 transact_time = self.current_timestamp
+            else:
+                raise ValueError(order_result)
+
         except IOError as e:
             error_description = str(e)
             is_server_overloaded = (
