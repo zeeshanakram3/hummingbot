@@ -4,10 +4,9 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Tuple
 
-from hummingbot.connector.utils import combine_to_hb_trading_pair, split_hb_trading_pair
+from hummingbot.connector.utils import split_hb_trading_pair
 from hummingbot.core.data_type.common import PositionAction, TradeType
 from hummingbot.core.data_type.trade_fee import DeductedFromReturnsTradeFee, TokenAmount
-from hummingbot.core.rate_oracle.rate_oracle import RateOracle
 from hummingbot.logger import HummingbotLogger
 from hummingbot.model.trade_fill import TradeFill
 
@@ -252,15 +251,8 @@ class PerformanceMetrics:
             if fee_token == quote:
                 self.fee_in_quote += fee_amount
             else:
-                rate_pair: str = combine_to_hb_trading_pair(fee_token, quote)
-                last_price = await RateOracle.get_instance().stored_or_live_rate(rate_pair)
-                if last_price is not None:
-                    self.fee_in_quote += fee_amount * last_price
-                else:
-                    self.logger().warning(
-                        f"Could not find exchange rate for {rate_pair} "
-                        f"using {RateOracle.get_instance()}. PNL value will be inconsistent."
-                    )
+                last_price = Decimal(str(trades[-1].price))
+                self.fee_in_quote += fee_amount * last_price
 
     def _calculate_trade_pnl(self, buys: list, sells: list):
         self.trade_pnl = self.cur_value - self.hold_value
@@ -308,9 +300,7 @@ class PerformanceMetrics:
         self.start_quote_bal = self.cur_quote_bal - self.tot_vol_quote
 
         self.start_price = Decimal(str(trades[0].price))
-        self.cur_price = await RateOracle.get_instance().stored_or_live_rate(trading_pair)
-        if self.cur_price is None:
-            self.cur_price = Decimal(str(trades[-1].price))
+        self.cur_price = Decimal(str(trades[-1].price))
         self.start_base_ratio_pct = self.divide(self.start_base_bal * self.start_price,
                                                 (self.start_base_bal * self.start_price) + self.start_quote_bal)
         self.cur_base_ratio_pct = self.divide(self.cur_base_bal * self.cur_price,

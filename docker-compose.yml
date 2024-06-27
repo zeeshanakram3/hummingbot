@@ -3,9 +3,9 @@ services:
   hummingbot:
     container_name: hummingbot
     image: hummingbot/hummingbot:latest
-#    build: Uncomment this and comment image if you want to build it locally
-#      context: .
-#      dockerfile: Dockerfile
+    #    build: Uncomment this and comment image if you want to build it locally
+    #      context: .
+    #      dockerfile: Dockerfile
     volumes:
       - ./conf:/home/hummingbot/conf
       - ./conf/connectors:/home/hummingbot/conf/connectors
@@ -43,3 +43,43 @@ services:
   #    - "./certs:/home/gateway/certs"
   #  environment:
   #    - GATEWAY_PASSPHRASE=a
+
+  broker:
+    container_name: broker
+    image: rabbitmq:3-management-alpine
+    restart: unless-stopped
+    ports:
+      - 127.0.0.1:5672:5672 # AMQP
+      - 127.0.0.1:15672:15672 # Management
+      - 127.0.0.1:1883:1883 # MQTT
+      - 127.0.0.1:61613:61613 # STOMP
+      - 127.0.0.1:15675:15675 # Web MQTT
+      - 127.0.0.1:15674:15674 # Web STOMP
+    volumes:
+      - ./rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
+      - ./rabbitmq/20-main.conf:/etc/rabbitmq/conf.d/20-main.conf:ro
+      - ./rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+      - ./rabbitmq/data:/var/lib/rabbitmq/mnesia/rabbit@my-rabbit
+      - ./rabbitmq/logs:/var/log/rabbitmq/log
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 5s
+      timeout: 30s
+      retries: 5
+
+  telegram_bot:
+    container_name: telegram_bot
+    image: hummingbot/telegram-bot
+    restart: unless-stopped
+    volumes:
+      - ./telegram-bot/bots-info.json:/telegram-bot/bots-info.json
+    environment:
+      - TELEGRAM_BOT_TOKEN=YOUR_TELEGRAM_BOT_TOKEN
+      - BROKER_HOST=broker
+      - BROKER_PORT=1883
+      - BROKER_USERNAME=admin
+      - BROKER_PASSWORD=admin
+      - BOTS_INFO_FILE=bots-info.json
+      - BALANCE_THRESHOLD_IN_USD=${BALANCE_THRESHOLD_IN_USD}
+      - TELEGRAM_ALERT_CHAT_ID=${TELEGRAM_ALERT_CHAT_ID}
+      - MONITORING_INTERVAL_IN_MINS=${MONITORING_INTERVAL_IN_MINS}
