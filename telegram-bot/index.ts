@@ -49,6 +49,7 @@ interface ExchangeData {
   balances?: BalanceData[]
   total?: string
   exchange?: string // Set by the code
+  bots?: string[] // Set by the code
 }
 
 interface BalanceResponse {
@@ -222,8 +223,12 @@ function aggregateBalancesByAccount(
         // Extract exchange name using account
         const exchange = getExchangeFromAccount(account)
         if (botBalance?.data && Object.keys(botBalance?.data).includes(exchange)) {
-          botBalance.data[exchange].exchange = exchange
-          accountBalances[account] = botBalance.data[exchange]
+          if (!accountBalances[account]) {
+            accountBalances[account] = botBalance.data[exchange]
+            accountBalances[account].bots = []
+          }
+          accountBalances[account].exchange = exchange
+          accountBalances[account].bots?.push(botId)
         }
       })
     }
@@ -268,6 +273,10 @@ function formatAllBalances(data: Record<AccountName, ExchangeData>): string {
   const accounts = Object.keys(data).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
   accounts.forEach((account) => {
     message += `\nAccount: *${account}*\n`
+
+    if (data[account].bots && data[account].bots?.length) {
+      message += `Bot IDs: *${data[account].bots?.join(', ')}*\n`
+    }
 
     if (data[account].message) {
       message += `${data[account].message}\n\n`
