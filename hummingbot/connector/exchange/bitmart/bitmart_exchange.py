@@ -64,6 +64,14 @@ class BitmartExchange(ExchangePyBase):
         super().__init__(client_config_map)
         self.real_time_balance_update = False
 
+    @staticmethod
+    def bitmart_order_type(order_type: OrderType) -> str:
+        return order_type.name.lower()
+
+    @staticmethod
+    def to_hb_order_type(mexc_type: str) -> OrderType:
+        return OrderType[mexc_type.upper()]
+
     @property
     def authenticator(self):
         return BitmartAuth(
@@ -121,7 +129,7 @@ class BitmartExchange(ExchangePyBase):
         :return a list of OrderType supported by this connector.
         Note that Market order type is no longer required and will not be used.
         """
-        return [OrderType.LIMIT, OrderType.LIMIT_MAKER]
+        return [OrderType.LIMIT, OrderType.MARKET, OrderType.LIMIT_MAKER]
 
     def _is_request_exception_related_to_time_synchronizer(self, request_exception: Exception):
         error_description = str(request_exception)
@@ -137,11 +145,8 @@ class BitmartExchange(ExchangePyBase):
         return False
 
     def _is_order_not_found_during_cancelation_error(self, cancelation_exception: Exception) -> bool:
-        # TODO: implement this method correctly for the connector
-        # The default implementation was added when the functionality to detect not found orders was introduced in the
-        # ExchangePyBase class. Also fix the unit test test_cancel_order_not_found_in_the_exchange when replacing the
-        # dummy implementation
-        return False
+        error_description = str(cancelation_exception)
+        return "50032" in error_description
 
     def _create_web_assistants_factory(self) -> WebAssistantsFactory:
         return web_utils.build_api_factory(
@@ -187,18 +192,31 @@ class BitmartExchange(ExchangePyBase):
                            order_type: OrderType,
                            price: Decimal,
                            **kwargs) -> Tuple[str, float]:
+        type_str = BitmartExchange.bitmart_order_type(order_type)
+        side_str = trade_type.name.lower()
+        symbol = await self.exchange_symbol_associated_to_pair(trading_pair)
+        amount_str = (
+            f"{amount*price:f}" if order_type is OrderType.MARKET and trade_type is TradeType.BUY else f"{amount:f}"
+        )
 
-        api_params = {"symbol": await self.exchange_symbol_associated_to_pair(trading_pair),
-                      "side": trade_type.name.lower(),
-                      "type": "limit",
-                      "size": f"{amount:f}",
-                      "price": f"{price:f}",
-                      "clientOrderId": order_id,
-                      }
+        api_params = {
+            "symbol": symbol,
+            "side": side_str,
+            "type": type_str,
+            "clientOrderId": order_id,
+        }
+        if order_type is OrderType.MARKET and trade_type is TradeType.BUY:
+            api_params["notional"] = amount_str
+        else:
+            api_params["size"] = amount_str
+
+        if order_type is OrderType.LIMIT or order_type is OrderType.LIMIT_MAKER:
+            api_params["price"] = f"{price:f}"
+
+        self.logger().info(f"_place_order {order_type, api_params}")
         order_result = await self._api_post(
-            path_url=CONSTANTS.CREATE_ORDER_PATH_URL,
-            data=api_params,
-            is_auth_required=True)
+            path_url=CONSTANTS.CREATE_ORDER_PATH_URL, data=api_params, is_auth_required=True
+        )
         exchange_order_id = str(order_result["data"]["order_id"])
 
         return exchange_order_id, self.current_timestamp
