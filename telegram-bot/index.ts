@@ -28,7 +28,6 @@ interface BalanceData {
   Asset: string
   Total: number
   'Total ($)': number
-  Allocated: string
 }
 
 interface StatusData {
@@ -49,7 +48,6 @@ interface ExchangeData {
   message?: string // "You have no balance on this exchange." (if no balance is available)
   balances?: BalanceData[]
   total?: string
-  allocated_percentage?: string
   exchange?: string // Set by the code
 }
 
@@ -248,10 +246,10 @@ function formatBalance(data: Record<AccountName, ExchangeData>): string {
     }
 
     data[account].balances?.forEach((balance) => {
-      message += `  *${balance.Asset}*: _${balance.Total} (${balance['Total ($)']}$)_\n`
+      message += `  *${balance.Asset}*: *${balance['Total ($)'].toFixed(1)}$* (${balance.Total.toFixed(1)})\n`
     })
 
-    message += `Total: *${data[account].total}*$\nAllocated: *${data[account].allocated_percentage}*\n\n`
+    message += `Total: *${data[account].total}*$\n\n`
   })
 
   return message
@@ -277,16 +275,16 @@ function formatAllBalances(data: Record<AccountName, ExchangeData>): string {
     }
 
     data[account].balances?.forEach((balance) => {
-      message += `  *${balance.Asset}*: _${balance.Total} (${balance['Total ($)']}$)_\n`
+      if (balance.Asset == 'JOY' || balance.Asset == 'USDT' || balance.Asset == 'USDC') {
+        message += `  *${balance.Asset}*: *${balance['Total ($)'].toFixed(1)}$* (${balance.Total.toFixed(1)})\n`
 
-      if (!assetSums[balance.Asset]) {
-        assetSums[balance.Asset] = { total: 0, totalValue: 0 }
+        if (!assetSums[balance.Asset]) {
+          assetSums[balance.Asset] = { total: 0, totalValue: 0 }
+        }
+        assetSums[balance.Asset].total += balance.Total
+        assetSums[balance.Asset].totalValue += balance['Total ($)']
       }
-      assetSums[balance.Asset].total += balance.Total
-      assetSums[balance.Asset].totalValue += balance['Total ($)']
     })
-
-    message += `Allocated: ${data[account].allocated_percentage}\n`
   })
 
   message += `\n*Total:*\n`
