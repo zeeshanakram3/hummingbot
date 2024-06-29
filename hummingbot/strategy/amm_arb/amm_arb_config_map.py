@@ -4,6 +4,7 @@ from hummingbot.client.config.config_validators import (
     validate_bool,
     validate_connector,
     validate_decimal,
+    validate_float,
     validate_int,
     validate_market_trading_pair,
 )
@@ -153,4 +154,22 @@ amm_arb_config_map = {
         default=Decimal("1"),
         validator=lambda v: validate_decimal(v),
         type_str="decimal"),
+    "pause_after_arb_taken": ConfigVar(
+        key="pause_after_arb_taken",
+        prompt="What is the minimum wait time before trying the next arb opportunity (Enter time seconds)? >>> ",
+        default=float("30"),
+        validator=lambda v: validate_float(v),
+        type_str="float"),
+    "failed_orders_count_before_long_pause": ConfigVar(
+        key="failed_orders_count_before_long_pause",
+        prompt="How many failed orders before entering long pause state? >>> ",
+        default=3,
+        validator=lambda v: validate_int(v, min_value=0),
+        type_str="int"),
+    "long_pause_duration_hours": ConfigVar(
+        key="long_pause_duration_hours",
+        prompt="How long to pause for on failed orders (Enter value in hours)? >>> ",
+        default=1,
+        validator=lambda v: validate_int(v, min_value=0),
+        type_str="int"),
 }

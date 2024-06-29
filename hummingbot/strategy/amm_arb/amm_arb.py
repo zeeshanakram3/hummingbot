@@ -82,6 +82,9 @@ class AmmArbStrategy(StrategyPyBase):
                     status_report_interval: float = 900,
                     gateway_transaction_cancel_interval: int = 600,
                     rate_source: Optional[RateOracle] = RateOracle.get_instance(),
+                    pause_after_arb_taken: float = float("30"),
+                    failed_orders_count_before_long_pause: int = 3,
+                    long_pause_duration: float = 3600,
                     ):
         """
         Assigns strategy parameters, this function must be called directly after init.
@@ -102,6 +105,7 @@ class AmmArbStrategy(StrategyPyBase):
         :param gateway_transaction_cancel_interval: Amount of seconds to wait before trying to cancel orders that are
         blockchain transactions that have not been included in a block (they are still in the mempool).
         :param rate_source: The rate source to use for conversion rate - (RateOracle or FixedRateSource) - default is FixedRateSource
+        :param pause_after_arb: The amount of time to pause looking for new opportunity after an arbitrage opportunity is found and executed.
         """
         self._market_info_1 = market_info_1
         self._market_info_2 = market_info_2
@@ -111,13 +115,16 @@ class AmmArbStrategy(StrategyPyBase):
         self._market_2_slippage_buffer = market_2_slippage_buffer
         self._concurrent_orders_submission = concurrent_orders_submission
         self._last_no_arb_reported = 0
+        self._last_arb_reported = 0
+        self._paused_until = 0
+        self._long_pause_duration = long_pause_duration
+        self._failed_orders_count_before_long_pause = failed_orders_count_before_long_pause
         self._all_arb_proposals = None
         self._all_markets_ready = False
 
         self._ev_loop = asyncio.get_event_loop()
         self._main_task = None
 
-        self._last_timestamp = 0
         self._status_report_interval = status_report_interval
         self.add_markets([market_info_1.market, market_info_2.market])
         self._quote_eth_rate_fetch_loop_task = None
@@ -128,6 +135,7 @@ class AmmArbStrategy(StrategyPyBase):
         self._gateway_transaction_cancel_interval = gateway_transaction_cancel_interval
 
         self._order_id_side_map: Dict[str, ArbProposalSide] = {}
+        self._pause_after_arb = float(pause_after_arb_taken)
 
     @property
     def all_markets_ready(self) -> bool:
@@ -191,7 +199,7 @@ class AmmArbStrategy(StrategyPyBase):
             else:
                 self.logger().info("Markets are ready. Trading started.")
 
-        if self.ready_for_new_arb_trades():
+        if self.ready_for_new_arb_trades() and not self.is_paused():
             if self._main_task is None or self._main_task.done():
                 self._main_task = safe_ensure_future(self.main())
         if self._cancel_outdated_orders_task is None or self._cancel_outdated_orders_task.done():
@@ -231,9 +239,15 @@ class AmmArbStrategy(StrategyPyBase):
                                    "\n".join(self.short_proposal_msg(self._all_arb_proposals, False)))
                 self._last_no_arb_reported = self.current_timestamp
             return
+
         await self.apply_slippage_buffers(profitable_arb_proposals)
         self.apply_budget_constraint(profitable_arb_proposals)
         await self.execute_arb_proposals(profitable_arb_proposals)
+        if self._arb_failures >= self._failed_orders_count_before_long_pause:
+            self._arb_failures = 0
+            self.pause_for(self._long_pause_duration)
+            self.notify_hb_app_with_timestamp(f"Pausing arbitrage bot for {self._long_pause_duration} seconds "
+                                              "due to too many failures submitting orders.")
 
     async def apply_gateway_transaction_cancel_interval(self):
         # XXX (martin_kou): Concurrent cancellations are not supported before the nonce architecture is fixed.
@@ -318,6 +332,7 @@ class AmmArbStrategy(StrategyPyBase):
                 arb_proposal = self.prioritize_evm_exchanges(arb_proposal)
 
             self.logger().info(f"Found arbitrage opportunity!: {arb_proposal}")
+            self._last_arb_reported = self.current_timestamp
 
             for arb_side in (arb_proposal.first_side, arb_proposal.second_side):
                 side: str = "BUY" if arb_side.is_buy else "SELL"
@@ -339,12 +354,21 @@ class AmmArbStrategy(StrategyPyBase):
                 if not self._concurrent_orders_submission:
                     await arb_side.completed_event.wait()
                     if arb_side.is_failed:
+                        self._arb_failures += 1
                         self.log_with_clock(logging.ERROR,
                                             f"Order {order_id} seems to have failed in this arbitrage opportunity. "
                                             f"Dropping Arbitrage Proposal. ")
                         return
 
             await arb_proposal.wait()
+            if self._concurrent_orders_submission:
+                if arb_proposal.first_side.is_failed:
+                    self._arb_failures += 1
+                if arb_proposal.second_side.is_failed:
+                    self._arb_failures += 1
+            else:
+                if arb_proposal.has_failed_orders():
+                    self._arb_failures += 1
 
     async def place_arb_order(
             self,
@@ -372,6 +396,15 @@ class AmmArbStrategy(StrategyPyBase):
                 order_price *= slippage_buffer_factor
 
         return place_order_fn(market_info, amount, market_info.market.get_taker_order_type(), order_price)
+
+    def is_paused(self) -> bool:
+        """
+        Returns True if the strategy should pause trying to take new arbitrage opportunities.
+        """
+        return self._paused_until > self.current_timestamp or self._last_arb_reported + self._pause_after_arb > self.current_timestamp
+
+    def pause_for(self, pause_duration_seconds: float):
+        self._paused_until = self.current_timestamp + pause_duration_seconds
 
     def ready_for_new_arb_trades(self) -> bool:
         """

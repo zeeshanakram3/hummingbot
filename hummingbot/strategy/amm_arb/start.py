@@ -26,6 +26,9 @@ def start(self):
     gateway_transaction_cancel_interval = amm_arb_config_map.get("gateway_transaction_cancel_interval").value
     rate_oracle_enabled = amm_arb_config_map.get("rate_oracle_enabled").value
     quote_conversion_rate = amm_arb_config_map.get("quote_conversion_rate").value
+    pause_after_arb_taken = amm_arb_config_map.get("pause_after_arb_taken").value
+    long_pause_duration = float(amm_arb_config_map.get("long_pause_duration_hours").value * 3600)
+    failed_orders_count_before_long_pause = amm_arb_config_map.get("failed_orders_count_before_long_pause").value
 
     self._initialize_markets([(connector_1, [market_1]), (connector_2, [market_2])])
     base_1, quote_1 = market_1.split("-")
@@ -75,4 +78,7 @@ def start(self):
                               concurrent_orders_submission=concurrent_orders_submission,
                               gateway_transaction_cancel_interval=gateway_transaction_cancel_interval,
                               rate_source=rate_source,
+                              pause_after_arb_taken=pause_after_arb_taken,
+                              failed_orders_count_before_long_pause=failed_orders_count_before_long_pause,
+                              long_pause_duration=long_pause_duration,
                               )

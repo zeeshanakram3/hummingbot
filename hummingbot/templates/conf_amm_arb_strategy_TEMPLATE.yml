@@ -2,7 +2,7 @@
 ###   AMM Arbitrage strategy config   ###
 ##########################################
 
-template_version: 6
+template_version: 7
 strategy: null
 
 # The following configurations are only required for the AMM arbitrage trading strategy
@@ -41,7 +41,16 @@ debug_price_shim: false
 gateway_transaction_cancel_interval: 600
 
 # What rate source should be used for quote assets pair - between fixed_rate_source and rate_oracle_source?
-rate_oracle_enabled: true
+rate_oracle_enabled: false
 
 # What is the fixed_rate used to convert quote assets?
 quote_conversion_rate: 1
+
+# Rate limit arb taking
+# What is the minimum wait time before trying the next arb opportunity (Enter time seconds)
+pause_after_arb_taken: 0
+# How many failed orders before the bot takes a long pause
+failed_orders_count_before_long_pause: 3
+# The duration of the long pause in hours
+long_pause_duration_hours: 1
+
