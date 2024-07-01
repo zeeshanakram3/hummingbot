@@ -7,9 +7,10 @@ from hummingbot.connector.gateway.common_types import Chain
 from hummingbot.connector.gateway.gateway_price_shim import GatewayPriceShim
 from hummingbot.core.rate_oracle.rate_oracle import RateOracle
 from hummingbot.core.utils.fixed_rate_source import FixedRateSource
-from hummingbot.strategy.amm_arb.amm_arb import AmmArbStrategy
-from hummingbot.strategy.amm_arb.amm_arb_config_map import amm_arb_config_map
 from hummingbot.strategy.market_trading_pair_tuple import MarketTradingPairTuple
+
+from .amm_arb import AmmArbStrategy
+from .amm_arb_config_map import amm_arb_config_map
 
 
 def start(self):

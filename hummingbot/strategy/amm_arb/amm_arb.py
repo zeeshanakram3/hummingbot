@@ -26,10 +26,11 @@ from hummingbot.core.event.events import (
 from hummingbot.core.rate_oracle.rate_oracle import RateOracle
 from hummingbot.core.utils.async_utils import safe_ensure_future
 from hummingbot.logger import HummingbotLogger
-from hummingbot.strategy.amm_arb.data_types import ArbProposalSide
-from hummingbot.strategy.amm_arb.utils import ArbProposal, create_arb_proposals
 from hummingbot.strategy.market_trading_pair_tuple import MarketTradingPairTuple
 from hummingbot.strategy.strategy_py_base import StrategyPyBase
+
+from .data_types import ArbProposalSide
+from .utils import ArbProposal, create_arb_proposals
 
 NaN = float("nan")
 s_decimal_zero = Decimal(0)
@@ -243,11 +244,13 @@ class AmmArbStrategy(StrategyPyBase):
         await self.apply_slippage_buffers(profitable_arb_proposals)
         self.apply_budget_constraint(profitable_arb_proposals)
         await self.execute_arb_proposals(profitable_arb_proposals)
-        if self._arb_failures >= self._failed_orders_count_before_long_pause:
-            self._arb_failures = 0
-            self.pause_for(self._long_pause_duration)
-            self.notify_hb_app_with_timestamp(f"Pausing arbitrage bot for {self._long_pause_duration} seconds "
-                                              "due to too many failures submitting orders.")
+
+        if self._failed_orders_count_before_long_pause > 0:
+            if self._arb_failures >= self._failed_orders_count_before_long_pause:
+                self._arb_failures = 0
+                self.pause_for(self._long_pause_duration)
+                self.notify_hb_app_with_timestamp(f"Pausing arbitrage bot for {self._long_pause_duration} seconds "
+                                                  "due to too many failures submitting orders.")
 
     async def apply_gateway_transaction_cancel_interval(self):
         # XXX (martin_kou): Concurrent cancellations are not supported before the nonce architecture is fixed.

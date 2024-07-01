@@ -156,20 +156,20 @@ amm_arb_config_map = {
         type_str="decimal"),
     "pause_after_arb_taken": ConfigVar(
         key="pause_after_arb_taken",
-        prompt="What is the minimum wait time before trying the next arb opportunity (Enter time seconds)? >>> ",
+        prompt="What is the minimum wait time before trying the next arb opportunity in seconds? >>> ",
         default=float("30"),
-        validator=lambda v: validate_float(v),
+        validator=lambda v: validate_float(v, min_value = 0),
         type_str="float"),
     "failed_orders_count_before_long_pause": ConfigVar(
         key="failed_orders_count_before_long_pause",
-        prompt="How many failed orders before entering long pause state? >>> ",
+        prompt="How many failed orders before entering long pause state? 0 to disable >>> ",
         default=3,
-        validator=lambda v: validate_int(v, min_value=0),
+        validator=lambda v: validate_int(v, min_value = 0),
         type_str="int"),
     "long_pause_duration_hours": ConfigVar(
         key="long_pause_duration_hours",
-        prompt="How long to pause for on failed orders (Enter value in hours)? >>> ",
+        prompt="How long to pause for on failed orders in hours? >>> ",
         default=1,
-        validator=lambda v: validate_int(v, min_value=0),
+        validator=lambda v: validate_float(v, min_value = 0),
         type_str="int"),
 }
