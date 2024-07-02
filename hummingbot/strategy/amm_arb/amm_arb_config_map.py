@@ -171,5 +171,5 @@ amm_arb_config_map = {
         prompt="How long to pause for on failed orders in hours? >>> ",
         default=1,
         validator=lambda v: validate_float(v, min_value = 0),
-        type_str="int"),
+        type_str="float"),
 }
