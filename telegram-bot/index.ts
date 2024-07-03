@@ -251,10 +251,10 @@ function formatBalance(data: Record<AccountName, ExchangeData>): string {
     }
 
     data[account].balances?.forEach((balance) => {
-      message += `  *${balance.Asset}*: *${balance['Total ($)'].toFixed(1)}$* (${balance.Total.toFixed(1)})\n`
+      message += `  *${balance.Asset}*: *$${balance['Total ($)'].toFixed(1)}* (${balance.Total.toFixed(1)})\n`
     })
 
-    message += `Total: *${data[account].total}*$\n\n`
+    message += `Total: *$${data[account].total}*\n\n`
   })
 
   return message
@@ -285,7 +285,7 @@ function formatAllBalances(data: Record<AccountName, ExchangeData>): string {
 
     data[account].balances?.forEach((balance) => {
       if (balance.Asset == 'JOY' || balance.Asset == 'USDT' || balance.Asset == 'USDC') {
-        message += `  *${balance.Asset}*: *${balance['Total ($)'].toFixed(1)}$* (${balance.Total.toFixed(1)})\n`
+        message += `  *${balance.Asset}*: *$${balance['Total ($)'].toFixed(1)}* (${balance.Total.toFixed(1)})\n`
 
         if (!assetSums[balance.Asset]) {
           assetSums[balance.Asset] = { total: 0, totalValue: 0 }
@@ -299,7 +299,7 @@ function formatAllBalances(data: Record<AccountName, ExchangeData>): string {
   message += `\n*Total:*\n`
   let totalValueSum = 0
   Object.keys(assetSums).forEach((asset) => {
-    message += `*${asset}*: ${assetSums[asset].total.toFixed(2)} (${assetSums[asset].totalValue.toFixed(1)}$)\n`
+    message += `*${asset}*: $${assetSums[asset].totalValue.toFixed(1)} (${assetSums[asset].total.toFixed(2)})\n`
     totalValueSum += assetSums[asset].totalValue
   })
   message += `\n*$$$*: ${totalValueSum.toFixed(1)}\n`
